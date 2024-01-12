@@ -2,7 +2,7 @@ const std = @import("std");
 
 const root = @import("root.zig");
 const Dense = root.layers.Dense;
-const activations = root.activations;
+const Layer = root.layers.Layer;
 const Model = root.Model;
 
 pub fn main() !void {
@@ -10,20 +10,28 @@ pub fn main() !void {
     const allocator = gpa.allocator();
     defer _ = gpa.deinit();
 
-    var layer1 = try Dense.init(allocator, 3, 2, activations.relu, gaussianRandom);
-    defer layer1.deinit(allocator);
+    var dense1 = try Dense.init(allocator, 3, 3, .leaky_relu, gaussianRandom);
+    var dense2 = try Dense.init(allocator, 3, 2, .leaky_relu, gaussianRandom);
+    var dense3 = try Dense.init(allocator, 2, 10, .sigmoid, gaussianRandom);
+
+    defer dense1.deinit(allocator);
+    defer dense2.deinit(allocator);
+    defer dense3.deinit(allocator);
 
     const input = [_]f32{ -3.0, 2.1, 1.0 };
 
-    var layers = [_]root.layers.Layer{layer1.layer()};
+    var layers = [_]Layer{
+        .{ .dense = dense1 },
+        .{ .dense = dense2 },
+        .{ .dense = dense3 },
+    };
     const model = Model{
         .layers = &layers,
     };
 
-    const output = try model.forward(allocator, &input);
+    const output = try model.predict(allocator, &input);
     defer allocator.free(output);
 
-    std.debug.print("{any}\n", .{layer1});
     std.debug.print("{any}\n", .{output});
 }
 

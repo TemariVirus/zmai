@@ -2,8 +2,10 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const assert = std.debug.assert;
 
-const Activation = @import("../activations.zig").Activation;
-const Layer = @import("../layers.zig").Layer;
+const root = @import("../root.zig");
+const activations = root.activations;
+const Activation = activations.Activation;
+const Layer = root.layers.Layer;
 
 const Self = @This();
 
@@ -42,7 +44,7 @@ pub fn outputSize(self: Self) usize {
     return self.biases.len;
 }
 
-pub fn forward(self: *Self, input: []const f32, output: []f32) void {
+pub fn forward(self: Self, input: []const f32, output: []f32) void {
     assert(input.len == self.inputSize());
     assert(output.len == self.outputSize());
 
@@ -55,9 +57,5 @@ pub fn forward(self: *Self, input: []const f32, output: []f32) void {
         }
     }
 
-    self.activation(output);
-}
-
-pub fn layer(self: *Self) Layer {
-    return Layer.init(self, forward, self.inputSize(), self.outputSize());
+    activations.forward(self.activation, output);
 }
