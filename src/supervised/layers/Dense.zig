@@ -5,10 +5,9 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const assert = std.debug.assert;
 
-const root = @import("../root.zig");
-const activations = root.activations;
+const activations = @import("../activations.zig");
 const Activation = activations.Activation;
-const Layer = root.layers.Layer;
+const Layer = @import("../layers.zig").Layer;
 
 const Self = @This();
 

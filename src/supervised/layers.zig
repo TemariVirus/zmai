@@ -5,6 +5,8 @@ pub const Dense = @import("layers/Dense.zig");
 
 pub const LayerTag = enum {
     dense,
+
+    // TODO
     // conv2d,
     // max_pool2d,
     // avg_pool2d,

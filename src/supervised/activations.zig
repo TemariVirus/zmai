@@ -1,6 +1,10 @@
+const math = @import("std").math;
+
 pub const Activation = enum {
     identity,
     sigmoid,
+    tanh,
+    softmax,
     relu,
     leaky_relu,
     elu,
@@ -13,6 +17,8 @@ pub fn forward(activation: Activation, arr: []f32) void {
     switch (activation) {
         .identity => identity(arr),
         .sigmoid => sigmoid(arr),
+        .tanh => tanh(arr),
+        .softmax => softmax(arr),
         .relu => relu(arr),
         .leaky_relu => leakyRelu(arr),
         .elu => elu(arr),
@@ -27,6 +33,8 @@ pub fn backward(activation: Activation, arr: []f32) void {
     switch (activation) {
         .identity => identityBackward(arr),
         .sigmoid => sigmoidBackward(arr),
+        .tanh => tanhBackward(arr),
+        .softmax => softmaxBackward(arr),
         .relu => reluBackward(arr),
         .leaky_relu => leakyReluBackward(arr),
         .elu => eluBackward(arr),
@@ -44,15 +52,58 @@ pub fn identityBackward(arr: []f32) void {
     }
 }
 
+pub const SIGMOID_A = 4.0;
 pub fn sigmoid(arr: []f32) void {
     for (arr) |*x| {
-        x.* = 1 / (1 + @exp(-x.*));
+        x.* = 1 / (1 + @exp(-SIGMOID_A * x.*));
     }
 }
 
 pub fn sigmoidBackward(arr: []f32) void {
     for (arr) |*x| {
-        x.* *= 1 - x.*;
+        x.* *= SIGMOID_A * (1 - x.*);
+    }
+}
+
+pub fn tanh(arr: []f32) void {
+    for (arr) |*x| {
+        x.* = math.tanh(x.*);
+    }
+}
+
+pub fn tanhBackward(arr: []f32) void {
+    for (arr) |*x| {
+        const tanh2 = x.* * x.*;
+        x.* = 1 - tanh2;
+    }
+}
+
+pub fn softmax(arr: []f32) void {
+    // Softmax is invariant under translation, so make the largest value 0 to
+    // avoid infinities
+    var max = arr[0];
+    for (arr[1..]) |x| {
+        max = @max(max, x);
+    }
+
+    var sum: f32 = 0.0;
+    for (arr) |*x| {
+        x.* = @exp(x.* - max);
+        sum += x.*;
+    }
+    for (arr) |*x| {
+        x.* /= sum;
+    }
+}
+
+/// NOTE: Assumes that softmax is only used in the last layer and that the loss
+/// function is cross-entropy. Thus, this function simply fills the array with
+/// ones as the combined derivative of softmax and cross-entropy is calculated
+/// in `losses.crossEntropyBackward`.
+pub fn softmaxBackward(arr: []f32) void {
+    for (0..arr.len) |i| {
+        // arr[i] *= 1 - arr[i]; // Actual
+        arr[i] = 1.0;
     }
 }
 
@@ -68,7 +119,7 @@ pub fn reluBackward(arr: []f32) void {
     }
 }
 
-pub const LEAKY_RELU_A = 0.1;
+pub const LEAKY_RELU_A = 0.3;
 pub fn leakyRelu(arr: []f32) void {
     for (arr) |*x| {
         x.* = if (x.* > 0)
