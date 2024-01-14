@@ -44,7 +44,7 @@ pub fn main() !void {
 
     // Create stochastic gradient descent optimiser and train the model
     const sgd = try Sgd.init(allocator, model);
-    sgd.fit(
+    try sgd.fit(
         &x,
         &y,
         10_000,
@@ -52,7 +52,7 @@ pub fn main() !void {
         .mean_squared_error,
         2.5,
     );
-    sgd.deinit(allocator);
+    sgd.deinit();
 
     // Print the model's predictions
     std.debug.print("\n", .{});

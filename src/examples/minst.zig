@@ -62,7 +62,7 @@ pub fn main() !void {
 
     // Create stochastic gradient descent optimiser and train the model
     const sgd = try Sgd.init(allocator, model);
-    sgd.fit(
+    try sgd.fit(
         x_train,
         y_train,
         200,
@@ -70,7 +70,7 @@ pub fn main() !void {
         .cross_entropy,
         0.2,
     );
-    sgd.deinit(allocator);
+    sgd.deinit();
 
     // Print train and test accuracy
     const train_acc = try accuracy(allocator, model, x_train, y_train);

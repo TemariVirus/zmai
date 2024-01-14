@@ -4,11 +4,13 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const assert = std.debug.assert;
 
+const Batcher = @import("../optimizers.zig").Batcher;
 const Loss = @import("../losses.zig").Loss;
 const Model = @import("../Model.zig");
 
 const Self = @This();
 
+allocator: Allocator,
 model: Model,
 activations: [][]f32,
 aux_activations: [2][]f32,
@@ -30,6 +32,7 @@ pub fn init(allocator: Allocator, model: Model) !Self {
     }
 
     return Self{
+        .allocator = allocator,
         .model = model,
         .activations = activations,
         .aux_activations = [_][]f32{ try allocator.alloc(f32, max_size), try allocator.alloc(f32, max_size) },
@@ -37,21 +40,20 @@ pub fn init(allocator: Allocator, model: Model) !Self {
     };
 }
 
-/// `allocator` must be the same allocator used in `init`.
-pub fn deinit(self: Self, allocator: Allocator) void {
+pub fn deinit(self: Self) void {
     for (self.activations) |arr| {
-        allocator.free(arr);
+        self.allocator.free(arr);
     }
-    allocator.free(self.activations);
+    self.allocator.free(self.activations);
 
     for (self.aux_activations) |arr| {
-        allocator.free(arr);
+        self.allocator.free(arr);
     }
 
     for (self.deltas) |arr| {
-        allocator.free(arr);
+        self.allocator.free(arr);
     }
-    allocator.free(self.deltas);
+    self.allocator.free(self.deltas);
 }
 
 // TODO: Add callbacks for logging, saving, etc.
@@ -63,28 +65,26 @@ pub fn fit(
     batch_size: usize,
     loss_fn: Loss,
     learning_rate: f32,
-) void {
+) !void {
     assert(x_data.len == y_data.len);
-    assert(batch_size > 0 and batch_size <= x_data.len);
 
-    // TODO: shuffle data
-    const batch_count = std.math.divCeil(usize, x_data.len, batch_size) catch unreachable;
-    for (0..epochs) |i| {
+    var batcher = try Batcher.init(self.allocator, batch_size, x_data, y_data);
+    defer batcher.deinit(self.allocator);
+
+    for (0..epochs) |epoch| {
         var loss: f32 = 0.0;
 
-        for (0..batch_count) |j| {
-            const start = j * batch_size;
-            const end = @min(start + batch_size, x_data.len);
+        while (batcher.next()) |batch| {
             loss += self.fitOnce(
-                x_data[start..end],
-                y_data[start..end],
+                batch.x,
+                batch.y,
                 loss_fn,
                 learning_rate,
             );
         }
 
         loss /= @floatFromInt(x_data.len);
-        std.debug.print("Epoch {d}, loss: {d}\n", .{ i + 1, loss });
+        std.debug.print("Epoch {d}, loss: {d}\n", .{ epoch + 1, loss });
     }
 }
 
