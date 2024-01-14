@@ -9,38 +9,38 @@ pub const Activation = enum {
     leaky_relu,
     elu,
     selu,
+
+    /// Calculates the values in `arr` after applying the activation function, and
+    /// stores the result in `arr`.
+    pub fn forward(self: Activation, arr: []f32) void {
+        switch (self) {
+            .identity => identity(arr),
+            .sigmoid => sigmoid(arr),
+            .tanh => tanh(arr),
+            .softmax => softmax(arr),
+            .relu => relu(arr),
+            .leaky_relu => leakyRelu(arr),
+            .elu => elu(arr),
+            .selu => selu(arr),
+        }
+    }
+
+    /// Calculates the partial derivatives of the values in `arr`, and stores the
+    /// result in `arr`, assuming that the values in `arr` have already been passed
+    /// through the activation function.
+    pub fn backward(self: Activation, arr: []f32) void {
+        switch (self) {
+            .identity => identityBackward(arr),
+            .sigmoid => sigmoidBackward(arr),
+            .tanh => tanhBackward(arr),
+            .softmax => softmaxBackward(arr),
+            .relu => reluBackward(arr),
+            .leaky_relu => leakyReluBackward(arr),
+            .elu => eluBackward(arr),
+            .selu => seluBackward(arr),
+        }
+    }
 };
-
-/// Calculates the values in `arr` after applying the activation function, and
-/// stores the result in `arr`.
-pub fn forward(activation: Activation, arr: []f32) void {
-    switch (activation) {
-        .identity => identity(arr),
-        .sigmoid => sigmoid(arr),
-        .tanh => tanh(arr),
-        .softmax => softmax(arr),
-        .relu => relu(arr),
-        .leaky_relu => leakyRelu(arr),
-        .elu => elu(arr),
-        .selu => selu(arr),
-    }
-}
-
-/// Calculates the partial derivatives of the values in `arr`, and stores the
-/// result in `arr`, assuming that the values in `arr` have already been passed
-/// through the activation function.
-pub fn backward(activation: Activation, arr: []f32) void {
-    switch (activation) {
-        .identity => identityBackward(arr),
-        .sigmoid => sigmoidBackward(arr),
-        .tanh => tanhBackward(arr),
-        .softmax => softmaxBackward(arr),
-        .relu => reluBackward(arr),
-        .leaky_relu => leakyReluBackward(arr),
-        .elu => eluBackward(arr),
-        .selu => seluBackward(arr),
-    }
-}
 
 /// Runs in O(0) time. That's even better than O(1)!
 pub fn identity(arr: []f32) void {

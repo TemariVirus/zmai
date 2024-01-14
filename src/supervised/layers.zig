@@ -2,23 +2,26 @@ const std = @import("std");
 const assert = std.debug.assert;
 
 pub const Dense = @import("layers/Dense.zig");
+pub const Conv2D = @import("layers/Conv2D.zig");
 
 pub const LayerTag = enum {
     dense,
+    conv2d,
 
     // TODO
-    // conv2d,
     // max_pool2d,
     // avg_pool2d,
 };
 
 pub const Layer = union(LayerTag) {
     dense: Dense,
+    conv2d: Conv2D,
 
     /// The number of input neurons.
     pub fn inputSize(self: Layer) usize {
         return switch (self) {
             .dense => |layer| layer.inputSize(),
+            .conv2d => |layer| layer.inputSize(),
         };
     }
 
@@ -26,6 +29,7 @@ pub const Layer = union(LayerTag) {
     pub fn outputSize(self: Layer) usize {
         return switch (self) {
             .dense => |layer| layer.outputSize(),
+            .conv2d => |layer| layer.outputSize(),
         };
     }
 
@@ -33,6 +37,7 @@ pub const Layer = union(LayerTag) {
     pub fn size(self: Layer) usize {
         return switch (self) {
             .dense => |layer| layer.size(),
+            .conv2d => |layer| layer.size(),
         };
     }
 
@@ -40,26 +45,25 @@ pub const Layer = union(LayerTag) {
     pub fn forward(self: Layer, input: []const f32, output: []f32) void {
         switch (self) {
             .dense => |layer| layer.forward(input, output),
+            .conv2d => |layer| layer.forward(input, output),
         }
     }
 
     /// Does a backwards pass and updates the weights and biases of this layer.
     ///
-    /// `learning_rate` - the learning rate to use.
-    ///
     /// `input` - the input to this layer in the forward pass. This function
-    /// updates this slice to be the gradient of the loss function with respect to
-    /// the input of this layer.
+    /// updates this slice to be the gradient of the loss function with respect
+    /// to the input of this layer.
     ///
-    /// `output` - the activations of this layer in the forward pass. This function
-    /// updates this slice to be the gradient of the activations with respect to
-    /// the unactivated output of this layer.
+    /// `output` - the activations of this layer in the forward pass. This
+    /// slice is also used as auxiliary memory.
     ///
     /// `output_grad` - the gradient of the loss function with respect to the
     /// activations of this layer.
     ///
-    /// `deltas` - the deltas to add to the weights and biases of this layer. This
-    /// function updates this slice accordingly, but does not apply the deltas.
+    /// `deltas` - the deltas to add to the weights and biases of this layer.
+    /// This function updates this slice accordingly, but does not apply the
+    /// deltas.
     pub fn backward(
         self: Layer,
         input: []f32,
@@ -74,6 +78,12 @@ pub const Layer = union(LayerTag) {
                 output_grad,
                 deltas,
             ),
+            .conv2d => |layer| layer.backward(
+                input,
+                output,
+                output_grad,
+                deltas,
+            ),
         }
     }
 
@@ -81,6 +91,7 @@ pub const Layer = union(LayerTag) {
     pub fn update(self: Layer, deltas: []const f32, learning_rate: f32) void {
         switch (self) {
             .dense => |layer| layer.update(deltas, learning_rate),
+            .conv2d => |layer| layer.update(deltas, learning_rate),
         }
     }
 };
