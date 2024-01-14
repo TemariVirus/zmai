@@ -42,6 +42,7 @@ pub fn backward(activation: Activation, arr: []f32) void {
     }
 }
 
+/// Runs in O(0) time. That's even better than O(1)!
 pub fn identity(arr: []f32) void {
     _ = arr;
 }

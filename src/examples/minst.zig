@@ -24,8 +24,20 @@ pub fn main() !void {
 
     // Define the model
     zmai.setRandomSeed(23);
-    const dense1 = try Dense.init(allocator, IMAGE_WIDTH * IMAGE_HEIGHT, 24, .elu, zmai.gaussianRandom);
-    const dense2 = try Dense.init(allocator, 24, 10, .softmax, zmai.gaussianRandom);
+    const dense1 = try Dense.init(
+        allocator,
+        IMAGE_WIDTH * IMAGE_HEIGHT,
+        20,
+        .elu,
+        zmai.uniformRandom,
+    );
+    const dense2 = try Dense.init(
+        allocator,
+        20,
+        10,
+        .softmax,
+        zmai.uniformRandom,
+    );
     defer dense1.deinit(allocator);
     defer dense2.deinit(allocator);
 
@@ -40,10 +52,26 @@ pub fn main() !void {
     // Download and decompress the data
     std.debug.print("Loading dataset...\n", .{});
     var client = Client{ .allocator = allocator };
-    const x_train = try readMinstImages(allocator, &client, "http://yann.lecun.com/exdb/mnist/train-images-idx3-ubyte.gz");
-    const y_train = try readMinstLabels(allocator, &client, "http://yann.lecun.com/exdb/mnist/train-labels-idx1-ubyte.gz");
-    const x_test = try readMinstImages(allocator, &client, "http://yann.lecun.com/exdb/mnist/t10k-images-idx3-ubyte.gz");
-    const y_test = try readMinstLabels(allocator, &client, "http://yann.lecun.com/exdb/mnist/t10k-labels-idx1-ubyte.gz");
+    const x_train = try readMinstImages(
+        allocator,
+        &client,
+        "http://yann.lecun.com/exdb/mnist/train-images-idx3-ubyte.gz",
+    );
+    const y_train = try readMinstLabels(
+        allocator,
+        &client,
+        "http://yann.lecun.com/exdb/mnist/train-labels-idx1-ubyte.gz",
+    );
+    const x_test = try readMinstImages(
+        allocator,
+        &client,
+        "http://yann.lecun.com/exdb/mnist/t10k-images-idx3-ubyte.gz",
+    );
+    const y_test = try readMinstLabels(
+        allocator,
+        &client,
+        "http://yann.lecun.com/exdb/mnist/t10k-labels-idx1-ubyte.gz",
+    );
     client.deinit();
     defer {
         for (x_train, y_train) |x, y| {
@@ -65,10 +93,10 @@ pub fn main() !void {
     try sgd.fit(
         x_train,
         y_train,
-        200,
+        100,
         50,
         .cross_entropy,
-        0.2,
+        0.18,
     );
     sgd.deinit();
 
@@ -80,7 +108,11 @@ pub fn main() !void {
     std.debug.print("Test accuracy: {d:.2}%\n", .{test_acc * 100});
 }
 
-fn readMinstLabels(allocator: Allocator, client: *Client, url: []const u8) ![][]f32 {
+fn readMinstLabels(
+    allocator: Allocator,
+    client: *Client,
+    url: []const u8,
+) ![][]f32 {
     var result = try client.fetch(allocator, .{
         .location = .{ .url = url },
     });
@@ -95,7 +127,8 @@ fn readMinstLabels(allocator: Allocator, client: *Client, url: []const u8) ![][]
     defer decompressed.deinit();
 
     const decompressed_reader = decompressed.reader();
-    assert(try decompressed_reader.readInt(i32, .big) == 2049); // Check magic number
+    // Check magic number
+    assert(try decompressed_reader.readInt(i32, .big) == 2049);
 
     const len = try decompressed_reader.readInt(u32, .big);
     const one_hot = try allocator.alloc([]f32, len);
@@ -110,7 +143,11 @@ fn readMinstLabels(allocator: Allocator, client: *Client, url: []const u8) ![][]
     return one_hot;
 }
 
-fn readMinstImages(allocator: Allocator, client: *Client, url: []const u8) ![][]f32 {
+fn readMinstImages(
+    allocator: Allocator,
+    client: *Client,
+    url: []const u8,
+) ![][]f32 {
     var result = try client.fetch(allocator, .{
         .location = .{ .url = url },
     });
@@ -125,7 +162,8 @@ fn readMinstImages(allocator: Allocator, client: *Client, url: []const u8) ![][]
     defer decompressed.deinit();
 
     const decompressed_reader = decompressed.reader();
-    assert(try decompressed_reader.readInt(i32, .big) == 2051); // Check magic number
+    // Check magic number
+    assert(try decompressed_reader.readInt(i32, .big) == 2051);
 
     const len = try decompressed_reader.readInt(u32, .big);
     _ = try decompressed_reader.readInt(u32, .big); // rows = 28
@@ -151,7 +189,12 @@ fn readMinstImages(allocator: Allocator, client: *Client, url: []const u8) ![][]
     return images;
 }
 
-fn accuracy(allocator: Allocator, model: Model, x_data: []const []const f32, y_data: []const []const f32) !f32 {
+fn accuracy(
+    allocator: Allocator,
+    model: Model,
+    x_data: []const []const f32,
+    y_data: []const []const f32,
+) !f32 {
     assert(x_data.len == y_data.len);
 
     var correct: usize = 0;

@@ -35,7 +35,10 @@ pub fn init(allocator: Allocator, model: Model) !Self {
         .allocator = allocator,
         .model = model,
         .activations = activations,
-        .aux_activations = [_][]f32{ try allocator.alloc(f32, max_size), try allocator.alloc(f32, max_size) },
+        .aux_activations = [_][]f32{
+            try allocator.alloc(f32, max_size),
+            try allocator.alloc(f32, max_size),
+        },
         .deltas = deltas,
     };
 }
@@ -113,6 +116,9 @@ pub fn fitOnce(
         );
     }
 
-    self.model.update(self.deltas, learning_rate / @as(f32, @floatFromInt(x_data.len)));
+    self.model.update(
+        self.deltas,
+        learning_rate / @as(f32, @floatFromInt(x_data.len)),
+    );
     return loss;
 }

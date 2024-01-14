@@ -20,7 +20,11 @@ pub fn size(self: Self) usize {
 
 /// Does a forward pass through the model, and stores the activations in
 /// `activations`.
-pub fn forward(self: Self, input: []const f32, activations: []const []f32) void {
+pub fn forward(
+    self: Self,
+    input: []const f32,
+    activations: []const []f32,
+) void {
     assert(activations.len == self.layers.len + 1);
 
     @memcpy(activations[0], input);
@@ -69,7 +73,11 @@ pub fn backward(
 }
 
 /// Updates the trainable parameters of the model.
-pub fn update(self: Self, deltas: []const []const f32, learning_rate: f32) void {
+pub fn update(
+    self: Self,
+    deltas: []const []const f32,
+    learning_rate: f32,
+) void {
     assert(deltas.len == self.layers.len);
 
     for (self.layers, deltas) |layer, delta| {

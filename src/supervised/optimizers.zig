@@ -52,7 +52,10 @@ pub const Batcher = struct {
         allocator.free(self.batch_y);
     }
 
-    pub fn next(self: *Batcher) ?struct { x: []const []const f32, y: []const []const f32 } {
+    pub fn next(self: *Batcher) ?struct {
+        x: []const []const f32,
+        y: []const []const f32,
+    } {
         if (self.current >= self.indices.len) {
             self.current = 0;
             return null;
