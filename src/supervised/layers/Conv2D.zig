@@ -43,12 +43,14 @@ pub fn init(
     assert(kernel_size.x > 0 and kernel_size.y > 0);
     assert(stride.x > 0 and stride.y > 0);
 
+    const kernel_volume = kernel_size.x * kernel_size.y * input_size.z;
+    const normalisation = 1.0 / @as(f32, @floatFromInt(kernel_volume));
     const weights = try allocator.alloc(
         f32,
-        output_channels * kernel_size.x * kernel_size.y * input_size.z,
+        output_channels * kernel_volume,
     );
     for (weights) |*w| {
-        w.* = randomF32();
+        w.* = randomF32() * normalisation;
     }
 
     const biases = try allocator.alloc(f32, output_channels);
@@ -91,10 +93,18 @@ pub fn inputSize(self: Self) usize {
 }
 
 pub fn outputSize(self: Self) usize {
+    const shape = self.outputShape();
+    return shape.x * shape.y * shape.z;
+}
+
+/// Returns the shape of the output of this layer.
+pub fn outputShape(self: Self) Size3D {
     // TODO: modify to work with padding
-    const output_x = (self.input_size.x - self.kernel_size.x) / self.stride.x + 1;
-    const output_y = (self.input_size.y - self.kernel_size.y) / self.stride.y + 1;
-    return output_x * output_y * self.channels();
+    return .{
+        .x = (self.input_size.x - self.kernel_size.x) / self.stride.x + 1,
+        .y = (self.input_size.y - self.kernel_size.y) / self.stride.y + 1,
+        .z = self.channels(),
+    };
 }
 
 pub fn size(self: Self) usize {

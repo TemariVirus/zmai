@@ -24,9 +24,11 @@ pub fn init(
     activation: Activation,
     comptime randomF32: fn () f32,
 ) !Self {
+    const normalisation = 1.0 / @as(f32, @floatFromInt(input_size));
+
     const weights = try allocator.alloc(f32, output_size * input_size);
     for (weights) |*w| {
-        w.* = randomF32();
+        w.* = randomF32() * normalisation;
     }
 
     const biases = try allocator.alloc(f32, output_size);
@@ -67,8 +69,8 @@ pub fn forward(self: Self, input: []const f32, output: []f32) void {
     @memcpy(output, self.biases);
 
     var k: usize = 0;
-    for (0..self.outputSize()) |i| {
-        for (0..self.inputSize()) |j| {
+    for (0..output.len) |i| {
+        for (0..input.len) |j| {
             output[i] += input[j] * self.weights[k];
             k += 1;
         }
@@ -102,12 +104,13 @@ pub fn backward(
     }
 
     k = 0;
-    for (0..input.len) |i| {
-        input[i] = 0.0;
+    for (input) |*value| {
+        value.* = 0.0;
     }
     for (0..output.len) |i| {
+        const grad = output[i] * output_grad[i];
         for (0..input.len) |j| {
-            input[j] += output[i] * output_grad[i] * self.weights[k];
+            input[j] += grad * self.weights[k];
             k += 1;
         }
     }

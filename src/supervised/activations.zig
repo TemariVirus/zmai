@@ -174,6 +174,6 @@ pub fn seluBackward(arr: []f32) void {
         x.* = if (x.* > 0)
             SELU_LAMBDA
         else
-            SELU_LAMBDA * (x.* + SELU_A);
+            x.* + SELU_LAMBDA * SELU_A;
     }
 }
