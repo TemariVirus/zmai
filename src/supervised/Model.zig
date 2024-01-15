@@ -103,13 +103,24 @@ pub fn predict(self: Self, allocator: Allocator, input: []const f32) ![]f32 {
         output = temp;
 
         // If resize fails, fall back to freeing and allocating
-        if (!allocator.resize(output, layer.outputSize())) {
+        if (output.len < layer.outputSize() and !allocator.resize(output, layer.outputSize())) {
             allocator.free(output);
             output = try allocator.alloc(f32, layer.outputSize());
         }
-        layer.forward(input2, output);
+        layer.forward(input2[0..layer.inputSize()], output[0..layer.outputSize()]);
+    }
+    allocator.free(input2);
+
+    // Output may be too large, size it properly
+    const out_size = self.layers[self.layers.len - 1].outputSize();
+    if (output.len == out_size) {
+        return output;
     }
 
-    allocator.free(input2);
+    const temp = output;
+    defer allocator.free(temp);
+
+    output = try allocator.alloc(f32, out_size);
+    @memcpy(output, temp[0..out_size]);
     return output;
 }

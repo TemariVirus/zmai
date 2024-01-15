@@ -24,6 +24,7 @@ pub fn init(
     activation: Activation,
     comptime randomF32: fn () f32,
 ) !Self {
+    // Normalisation needed for numerical stability
     const normalisation = 1.0 / @as(f32, @floatFromInt(input_size));
 
     const weights = try allocator.alloc(f32, output_size * input_size);

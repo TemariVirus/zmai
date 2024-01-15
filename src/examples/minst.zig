@@ -6,15 +6,17 @@ const assert = std.debug.assert;
 
 const zmai = @import("zmai");
 const supervised = zmai.supervised;
+const Conv2D = supervised.layers.Conv2D;
 const Dense = supervised.layers.Dense;
 const Layer = supervised.layers.Layer;
 const Model = supervised.Model;
 const Sgd = supervised.optimizers.Sgd;
 
 // Crop edges of images as they are mostly 0s
-const EDGE_CROP = 3;
+const EDGE_CROP = 2;
 const IMAGE_WIDTH = 28 - (2 * EDGE_CROP);
 const IMAGE_HEIGHT = 28 - (2 * EDGE_CROP);
+const NUM_CLASSES = 10;
 
 // Train a model to recognize handwritten digits from the MNIST dataset.
 pub fn main() !void {
@@ -24,24 +26,69 @@ pub fn main() !void {
 
     // Define the model
     zmai.setRandomSeed(23);
+    const conv1 = try Conv2D.init(
+        allocator,
+        .{ .x = IMAGE_WIDTH, .y = IMAGE_HEIGHT, .z = 1 },
+        3,
+        .{ .x = 5, .y = 5 },
+        .{ .x = 1, .y = 1 },
+        .elu,
+        zmai.uniformRandom,
+    );
+    // Pretend this is paramaterised pooling for now
+    const pool1 = try Conv2D.init(
+        allocator,
+        conv1.outputShape(),
+        conv1.channels(),
+        .{ .x = 2, .y = 2 },
+        .{ .x = 2, .y = 2 },
+        .identity,
+        zmai.uniformRandom,
+    );
+    const conv2 = try Conv2D.init(
+        allocator,
+        pool1.outputShape(),
+        6,
+        .{ .x = 3, .y = 3 },
+        .{ .x = 1, .y = 1 },
+        .elu,
+        zmai.uniformRandom,
+    );
+    const pool2 = try Conv2D.init(
+        allocator,
+        conv2.outputShape(),
+        conv2.channels(),
+        .{ .x = 2, .y = 2 },
+        .{ .x = 2, .y = 2 },
+        .identity,
+        zmai.uniformRandom,
+    );
     const dense1 = try Dense.init(
         allocator,
-        IMAGE_WIDTH * IMAGE_HEIGHT,
-        20,
+        pool2.outputSize(),
+        24,
         .elu,
         zmai.uniformRandom,
     );
     const dense2 = try Dense.init(
         allocator,
-        20,
-        10,
+        dense1.outputSize(),
+        NUM_CLASSES,
         .softmax,
         zmai.uniformRandom,
     );
+    defer conv1.deinit(allocator);
+    defer pool1.deinit(allocator);
+    defer conv2.deinit(allocator);
+    defer pool2.deinit(allocator);
     defer dense1.deinit(allocator);
     defer dense2.deinit(allocator);
 
     const layers = [_]Layer{
+        .{ .conv2d = conv1 },
+        .{ .conv2d = pool1 },
+        .{ .conv2d = conv2 },
+        .{ .conv2d = pool2 },
         .{ .dense = dense1 },
         .{ .dense = dense2 },
     };
@@ -93,10 +140,10 @@ pub fn main() !void {
     try sgd.fit(
         x_train,
         y_train,
-        100,
-        50,
+        15,
+        60,
         .cross_entropy,
-        0.18,
+        0.16,
     );
     sgd.deinit();
 
@@ -203,6 +250,7 @@ fn accuracy(
 
         const y_pred = try model.predict(allocator, x);
         const pred_label = maxIndex(y_pred);
+        allocator.free(y_pred);
 
         if (true_label == pred_label) {
             correct += 1;

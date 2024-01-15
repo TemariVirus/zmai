@@ -43,6 +43,7 @@ pub fn init(
     assert(kernel_size.x > 0 and kernel_size.y > 0);
     assert(stride.x > 0 and stride.y > 0);
 
+    // Normalisation needed for numerical stability
     const kernel_volume = kernel_size.x * kernel_size.y * input_size.z;
     const normalisation = 1.0 / @as(f32, @floatFromInt(kernel_volume));
     const weights = try allocator.alloc(
@@ -114,17 +115,10 @@ pub fn size(self: Self) usize {
 /// `input` should be ordered in such a way that position (x, y, z) corresponds
 /// to index `x + (y * input_size.x) + (z * input_size.x * input_size.y)`.
 /// `output` will be ordered similarly after the forward pass.
+// TODO: See if changing the order of loops increases performance for forward and backward passes
 pub fn forward(self: Self, input: []const f32, output: []f32) void {
     assert(input.len == self.inputSize());
     assert(output.len == self.outputSize());
-
-    var i: usize = 0;
-    for (0..self.channels()) |z| {
-        for (0..output.len / self.channels()) |_| {
-            output[i] = self.biases[z];
-            i += 1;
-        }
-    }
 
     // TODO: modify to work with padding
     // Loop through each kernel
@@ -136,7 +130,7 @@ pub fn forward(self: Self, input: []const f32, output: []f32) void {
             var x: usize = 0;
             while (x + self.kernel_size.x <= self.input_size.x) : (x += self.stride.x) {
                 // Multiply the kernel with the input and add to the output
-                output[out_i] += self.forwardKernel(kernel_i, x, y, input);
+                output[out_i] = self.forwardKernel(kernel_i, x, y, input);
                 out_i += 1;
             }
         }
@@ -146,7 +140,7 @@ pub fn forward(self: Self, input: []const f32, output: []f32) void {
 }
 
 inline fn forwardKernel(self: Self, kernel_i: usize, x: usize, y: usize, input: []const f32) f32 {
-    var sum: f32 = 0.0;
+    var sum: f32 = self.biases[kernel_i];
 
     var weight_i = kernel_i * self.kernel_size.x * self.kernel_size.y * self.inputChannels();
     for (0..self.inputChannels()) |z| {
@@ -164,7 +158,6 @@ inline fn forwardKernel(self: Self, kernel_i: usize, x: usize, y: usize, input: 
     return sum;
 }
 
-// TODO
 pub fn backward(
     self: Self,
     input: []f32,
@@ -179,7 +172,83 @@ pub fn backward(
 
     self.activation.backward(output);
 
-    @panic("Not implemented");
+    // TODO: modify to work with padding
+    // Loop through each kernel
+    var out_i: usize = 0;
+    for (0..self.channels()) |kernel_i| {
+        // Slide the kernel across the input
+        var y: usize = 0;
+        while (y + self.kernel_size.y <= self.input_size.y) : (y += self.stride.y) {
+            var x: usize = 0;
+            while (x + self.kernel_size.x <= self.input_size.x) : (x += self.stride.x) {
+                // Multiply the kernel with the input and add to the output
+                self.backwardKernelDeltas(
+                    kernel_i,
+                    x,
+                    y,
+                    input,
+                    deltas,
+                    output[out_i] * output_grad[out_i],
+                );
+                out_i += 1;
+            }
+        }
+    }
+
+    out_i = 0;
+    for (input) |*value| {
+        value.* = 0.0;
+    }
+    for (0..self.channels()) |kernel_i| {
+        // Slide the kernel across the input
+        var y: usize = 0;
+        while (y + self.kernel_size.y <= self.input_size.y) : (y += self.stride.y) {
+            var x: usize = 0;
+            while (x + self.kernel_size.x <= self.input_size.x) : (x += self.stride.x) {
+                // Multiply the kernel with the input and add to the output
+                self.backwardKernelInput(
+                    kernel_i,
+                    x,
+                    y,
+                    input,
+                    output[out_i] * output_grad[out_i],
+                );
+                out_i += 1;
+            }
+        }
+    }
+}
+
+inline fn backwardKernelDeltas(self: Self, kernel_i: usize, x: usize, y: usize, input: []const f32, deltas: []f32, gradient: f32) void {
+    deltas[self.weights.len + kernel_i] -= gradient;
+
+    var weight_i = kernel_i * self.kernel_size.x * self.kernel_size.y * self.inputChannels();
+    for (0..self.inputChannels()) |z| {
+        var in_i = z * self.input_size.x * self.input_size.y + y * self.input_size.x + x;
+        for (0..self.kernel_size.y) |_| {
+            for (0..self.kernel_size.x) |_| {
+                deltas[weight_i] -= gradient * input[in_i];
+                in_i += 1;
+                weight_i += 1;
+            }
+            in_i += self.input_size.x - self.kernel_size.x;
+        }
+    }
+}
+
+inline fn backwardKernelInput(self: Self, kernel_i: usize, x: usize, y: usize, input: []f32, gradient: f32) void {
+    var weight_i = kernel_i * self.kernel_size.x * self.kernel_size.y * self.inputChannels();
+    for (0..self.inputChannels()) |z| {
+        var in_i = z * self.input_size.x * self.input_size.y + y * self.input_size.x + x;
+        for (0..self.kernel_size.y) |_| {
+            for (0..self.kernel_size.x) |_| {
+                input[in_i] += gradient * self.weights[weight_i];
+                in_i += 1;
+                weight_i += 1;
+            }
+            in_i += self.input_size.x - self.kernel_size.x;
+        }
+    }
 }
 
 pub fn update(self: Self, deltas: []const f32, learning_rate: f32) void {
