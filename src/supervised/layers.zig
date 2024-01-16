@@ -3,25 +3,40 @@ const assert = std.debug.assert;
 
 pub const Dense = @import("layers/Dense.zig");
 pub const Conv2D = @import("layers/Conv2D.zig");
+pub const MaxPool2D = @import("layers/MaxPool2D.zig");
+pub const AvgPool2D = @import("layers/AvgPool2D.zig");
+
+pub const Size2D = struct {
+    x: usize,
+    y: usize,
+};
+
+pub const Size3D = struct {
+    x: usize,
+    y: usize,
+    z: usize,
+};
 
 pub const LayerTag = enum {
     dense,
     conv2d,
-
-    // TODO
-    // max_pool2d,
-    // avg_pool2d,
+    max_pool2d,
+    avg_pool2d,
 };
 
 pub const Layer = union(LayerTag) {
     dense: Dense,
     conv2d: Conv2D,
+    max_pool2d: MaxPool2D,
+    avg_pool2d: AvgPool2D,
 
     /// The number of input neurons.
     pub fn inputSize(self: Layer) usize {
         return switch (self) {
             .dense => |layer| layer.inputSize(),
             .conv2d => |layer| layer.inputSize(),
+            .max_pool2d => |layer| layer.inputSize(),
+            .avg_pool2d => |layer| layer.inputSize(),
         };
     }
 
@@ -30,6 +45,8 @@ pub const Layer = union(LayerTag) {
         return switch (self) {
             .dense => |layer| layer.outputSize(),
             .conv2d => |layer| layer.outputSize(),
+            .max_pool2d => |layer| layer.outputSize(),
+            .avg_pool2d => |layer| layer.outputSize(),
         };
     }
 
@@ -38,6 +55,8 @@ pub const Layer = union(LayerTag) {
         return switch (self) {
             .dense => |layer| layer.size(),
             .conv2d => |layer| layer.size(),
+            .max_pool2d => |layer| layer.size(),
+            .avg_pool2d => |layer| layer.size(),
         };
     }
 
@@ -46,6 +65,8 @@ pub const Layer = union(LayerTag) {
         switch (self) {
             .dense => |layer| layer.forward(input, output),
             .conv2d => |layer| layer.forward(input, output),
+            .max_pool2d => |layer| layer.forward(input, output),
+            .avg_pool2d => |layer| layer.forward(input, output),
         }
     }
 
@@ -84,6 +105,18 @@ pub const Layer = union(LayerTag) {
                 output_grad,
                 deltas,
             ),
+            .max_pool2d => |layer| layer.backward(
+                input,
+                output,
+                output_grad,
+                deltas,
+            ),
+            .avg_pool2d => |layer| layer.backward(
+                input,
+                output,
+                output_grad,
+                deltas,
+            ),
         }
     }
 
@@ -92,6 +125,8 @@ pub const Layer = union(LayerTag) {
         switch (self) {
             .dense => |layer| layer.update(deltas, learning_rate),
             .conv2d => |layer| layer.update(deltas, learning_rate),
+            .max_pool2d => {},
+            .avg_pool2d => {},
         }
     }
 };

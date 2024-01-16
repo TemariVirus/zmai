@@ -6,11 +6,14 @@ const assert = std.debug.assert;
 
 const zmai = @import("zmai");
 const supervised = zmai.supervised;
-const Conv2D = supervised.layers.Conv2D;
-const Dense = supervised.layers.Dense;
-const Layer = supervised.layers.Layer;
 const Model = supervised.Model;
 const Sgd = supervised.optimizers.Sgd;
+
+const Layer = supervised.layers.Layer;
+const Conv2D = supervised.layers.Conv2D;
+const MaxPool2D = supervised.layers.MaxPool2D;
+const AvgPool2D = supervised.layers.AvgPool2D;
+const Dense = supervised.layers.Dense;
 
 // Crop edges of images as they are mostly 0s
 const EDGE_CROP = 2;
@@ -35,15 +38,10 @@ pub fn main() !void {
         .elu,
         zmai.uniformRandom,
     );
-    // Pretend this is paramaterised pooling for now
-    const pool1 = try Conv2D.init(
-        allocator,
+    const pool1 = MaxPool2D.init(
         conv1.outputShape(),
-        conv1.channels(),
         .{ .x = 2, .y = 2 },
         .{ .x = 2, .y = 2 },
-        .identity,
-        zmai.uniformRandom,
     );
     const conv2 = try Conv2D.init(
         allocator,
@@ -54,14 +52,10 @@ pub fn main() !void {
         .elu,
         zmai.uniformRandom,
     );
-    const pool2 = try Conv2D.init(
-        allocator,
+    const pool2 = AvgPool2D.init(
         conv2.outputShape(),
-        conv2.channels(),
         .{ .x = 2, .y = 2 },
         .{ .x = 2, .y = 2 },
-        .identity,
-        zmai.uniformRandom,
     );
     const dense1 = try Dense.init(
         allocator,
@@ -78,17 +72,15 @@ pub fn main() !void {
         zmai.uniformRandom,
     );
     defer conv1.deinit(allocator);
-    defer pool1.deinit(allocator);
     defer conv2.deinit(allocator);
-    defer pool2.deinit(allocator);
     defer dense1.deinit(allocator);
     defer dense2.deinit(allocator);
 
     const layers = [_]Layer{
         .{ .conv2d = conv1 },
-        .{ .conv2d = pool1 },
+        .{ .max_pool2d = pool1 },
         .{ .conv2d = conv2 },
-        .{ .conv2d = pool2 },
+        .{ .avg_pool2d = pool2 },
         .{ .dense = dense1 },
         .{ .dense = dense2 },
     };
@@ -143,7 +135,7 @@ pub fn main() !void {
         15,
         60,
         .cross_entropy,
-        0.16,
+        0.2,
     );
     sgd.deinit();
 
