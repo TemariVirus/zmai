@@ -12,11 +12,11 @@ pub fn build(b: *std.Build) void {
     });
 
     const zmai_module = b.addModule("zmai", .{
-        .source_file = .{ .path = "src/root.zig" },
-        .dependencies = &.{},
+        .root_source_file = .{ .path = "src/root.zig" },
+        .imports = &.{},
     });
 
-    exe.addModule("zmai", zmai_module);
+    exe.root_module.addImport("zmai", zmai_module);
 
     b.installArtifact(exe);
 

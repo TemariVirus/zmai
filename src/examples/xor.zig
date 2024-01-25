@@ -47,10 +47,10 @@ pub fn main() !void {
     try sgd.fit(
         &x,
         &y,
-        10_000,
+        3_000,
         x.len,
         .mean_squared_error,
-        2.5,
+        1.5,
     );
     sgd.deinit();
 

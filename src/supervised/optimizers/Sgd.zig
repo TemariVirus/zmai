@@ -75,6 +75,8 @@ pub fn fit(
     defer batcher.deinit(self.allocator);
 
     for (0..epochs) |epoch| {
+        const start = std.time.nanoTimestamp();
+
         var loss: f32 = 0.0;
 
         while (batcher.next()) |batch| {
@@ -87,7 +89,8 @@ pub fn fit(
         }
 
         loss /= @floatFromInt(x_data.len);
-        std.debug.print("Epoch {d}, loss: {d}\n", .{ epoch + 1, loss });
+        const time_taken: u64 = @intCast(std.time.nanoTimestamp() - start);
+        std.debug.print("Epoch {d}, loss: {d:.3}, time: {}\n", .{ epoch + 1, loss, std.fmt.fmtDuration(time_taken) });
     }
 }
 

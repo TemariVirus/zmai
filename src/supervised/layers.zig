@@ -33,40 +33,28 @@ pub const Layer = union(LayerTag) {
     /// The number of input neurons.
     pub fn inputSize(self: Layer) usize {
         return switch (self) {
-            .dense => |layer| layer.inputSize(),
-            .conv2d => |layer| layer.inputSize(),
-            .max_pool2d => |layer| layer.inputSize(),
-            .avg_pool2d => |layer| layer.inputSize(),
+            inline else => |layer| layer.inputSize(),
         };
     }
 
     /// The number of output neurons.
     pub fn outputSize(self: Layer) usize {
         return switch (self) {
-            .dense => |layer| layer.outputSize(),
-            .conv2d => |layer| layer.outputSize(),
-            .max_pool2d => |layer| layer.outputSize(),
-            .avg_pool2d => |layer| layer.outputSize(),
+            inline else => |layer| layer.outputSize(),
         };
     }
 
     /// The number of trainable parameters.
     pub fn size(self: Layer) usize {
         return switch (self) {
-            .dense => |layer| layer.size(),
-            .conv2d => |layer| layer.size(),
-            .max_pool2d => |layer| layer.size(),
-            .avg_pool2d => |layer| layer.size(),
+            inline else => |layer| layer.size(),
         };
     }
 
     /// Does a forward pass and stores the activations in `output`.
     pub fn forward(self: Layer, input: []const f32, output: []f32) void {
         switch (self) {
-            .dense => |layer| layer.forward(input, output),
-            .conv2d => |layer| layer.forward(input, output),
-            .max_pool2d => |layer| layer.forward(input, output),
-            .avg_pool2d => |layer| layer.forward(input, output),
+            inline else => |layer| layer.forward(input, output),
         }
     }
 
@@ -93,25 +81,7 @@ pub const Layer = union(LayerTag) {
         deltas: []f32,
     ) void {
         switch (self) {
-            .dense => |layer| layer.backward(
-                input,
-                output,
-                output_grad,
-                deltas,
-            ),
-            .conv2d => |layer| layer.backward(
-                input,
-                output,
-                output_grad,
-                deltas,
-            ),
-            .max_pool2d => |layer| layer.backward(
-                input,
-                output,
-                output_grad,
-                deltas,
-            ),
-            .avg_pool2d => |layer| layer.backward(
+            inline else => |layer| layer.backward(
                 input,
                 output,
                 output_grad,
@@ -123,10 +93,8 @@ pub const Layer = union(LayerTag) {
     /// Updates the weights and biases of this layer.
     pub fn update(self: Layer, deltas: []const f32, learning_rate: f32) void {
         switch (self) {
-            .dense => |layer| layer.update(deltas, learning_rate),
-            .conv2d => |layer| layer.update(deltas, learning_rate),
-            .max_pool2d => {},
-            .avg_pool2d => {},
+            .max_pool2d, .avg_pool2d => {},
+            inline else => |layer| layer.update(deltas, learning_rate),
         }
     }
 };
