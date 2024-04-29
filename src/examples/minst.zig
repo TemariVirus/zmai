@@ -88,30 +88,8 @@ pub fn main() !void {
         .layers = &layers,
     };
 
-    // Download and decompress the data
     std.debug.print("Loading dataset...\n", .{});
-    var client = Client{ .allocator = allocator };
-    const x_train = try readMinstImages(
-        allocator,
-        &client,
-        "http://yann.lecun.com/exdb/mnist/train-images-idx3-ubyte.gz",
-    );
-    const y_train = try readMinstLabels(
-        allocator,
-        &client,
-        "http://yann.lecun.com/exdb/mnist/train-labels-idx1-ubyte.gz",
-    );
-    const x_test = try readMinstImages(
-        allocator,
-        &client,
-        "http://yann.lecun.com/exdb/mnist/t10k-images-idx3-ubyte.gz",
-    );
-    const y_test = try readMinstLabels(
-        allocator,
-        &client,
-        "http://yann.lecun.com/exdb/mnist/t10k-labels-idx1-ubyte.gz",
-    );
-    client.deinit();
+    const x_train, const y_train, const x_test, const y_test = try loadMinst(allocator);
     defer {
         for (x_train, y_train) |x, y| {
             allocator.free(x);
@@ -127,8 +105,9 @@ pub fn main() !void {
         allocator.free(y_test);
     }
 
-    // Create stochastic gradient descent optimiser and train the model
+    std.debug.print("Training model...\n", .{});
     const sgd = try Sgd.init(allocator, model);
+    defer sgd.deinit();
     try sgd.fit(
         x_train,
         y_train,
@@ -137,7 +116,6 @@ pub fn main() !void {
         .cross_entropy,
         0.2,
     );
-    sgd.deinit();
 
     // Print train and test accuracy
     const train_acc = try accuracy(allocator, model, x_train, y_train);
@@ -147,25 +125,66 @@ pub fn main() !void {
     std.debug.print("Test accuracy: {d:.2}%\n", .{test_acc * 100});
 }
 
+fn loadMinst(allocator: Allocator) !struct {
+    [][]f32,
+    [][]f32,
+    [][]f32,
+    [][]f32,
+} {
+    var client = Client{ .allocator = allocator };
+    defer client.deinit();
+
+    const x_train = try readMinstImages(
+        allocator,
+        &client,
+        "http://yann.lecun.com/exdb/mnist/train-images-idx3-ubyte.gz",
+    );
+    errdefer allocator.free(x_train);
+    const y_train = try readMinstLabels(
+        allocator,
+        &client,
+        "http://yann.lecun.com/exdb/mnist/train-labels-idx1-ubyte.gz",
+    );
+    errdefer allocator.free(y_train);
+    const x_test = try readMinstImages(
+        allocator,
+        &client,
+        "http://yann.lecun.com/exdb/mnist/t10k-images-idx3-ubyte.gz",
+    );
+    errdefer allocator.free(x_test);
+    const y_test = try readMinstLabels(
+        allocator,
+        &client,
+        "http://yann.lecun.com/exdb/mnist/t10k-labels-idx1-ubyte.gz",
+    );
+
+    return .{ x_train, y_train, x_test, y_test };
+}
+
 fn readMinstLabels(
     allocator: Allocator,
     client: *Client,
     url: []const u8,
 ) ![][]f32 {
-    var result = try client.fetch(allocator, .{
+    var res_body = std.ArrayList(u8).init(allocator);
+    defer res_body.deinit();
+
+    const result = try client.fetch(.{
+        .response_storage = .{ .dynamic = &res_body },
         .location = .{ .url = url },
     });
-    defer result.deinit();
+    if (result.status != .ok) {
+        return error.NetworkError;
+    }
 
-    var result_stream = std.io.FixedBufferStream([]const u8){
-        .buffer = result.body.?,
+    var result_stream = std.io.FixedBufferStream([]u8){
+        .buffer = res_body.items,
         .pos = 0,
     };
 
-    var decompressed = try gzip.decompress(allocator, result_stream.reader());
-    defer decompressed.deinit();
+    var decompresser = gzip.decompressor(result_stream.reader());
+    const decompressed_reader = decompresser.reader();
 
-    const decompressed_reader = decompressed.reader();
     // Check magic number
     assert(try decompressed_reader.readInt(i32, .big) == 2049);
 
@@ -187,20 +206,26 @@ fn readMinstImages(
     client: *Client,
     url: []const u8,
 ) ![][]f32 {
-    var result = try client.fetch(allocator, .{
+    var res_body = std.ArrayList(u8).init(allocator);
+    defer res_body.deinit();
+
+    const result = try client.fetch(.{
+        .response_storage = .{ .dynamic = &res_body },
+        .max_append_size = 10 * 1024 * 1024, // Largest file is around 9.5MB, 10MiB should be enough
         .location = .{ .url = url },
     });
-    defer result.deinit();
+    if (result.status != .ok) {
+        return error.NetworkError;
+    }
 
     var result_stream = std.io.FixedBufferStream([]const u8){
-        .buffer = result.body.?,
+        .buffer = res_body.items,
         .pos = 0,
     };
 
-    var decompressed = try gzip.decompress(allocator, result_stream.reader());
-    defer decompressed.deinit();
+    var decompresser = gzip.decompressor(result_stream.reader());
+    const decompressed_reader = decompresser.reader();
 
-    const decompressed_reader = decompressed.reader();
     // Check magic number
     assert(try decompressed_reader.readInt(i32, .big) == 2051);
 
