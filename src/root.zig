@@ -1,3 +1,4 @@
+pub const genetic = @import("genetic.zig");
 pub const supervised = @import("supervised.zig");
 
 const std = @import("std");
