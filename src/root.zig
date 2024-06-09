@@ -1,5 +1,6 @@
-const std = @import("std");
 pub const supervised = @import("supervised.zig");
+
+const std = @import("std");
 
 var rand = std.rand.DefaultPrng.init(0);
 pub const random = rand.random();
@@ -18,4 +19,8 @@ pub fn uniformRandom() f32 {
 /// deviation 1.
 pub fn gaussianRandom() f32 {
     return random.floatNorm(f32);
+}
+
+test {
+    std.testing.refAllDecls(@This());
 }
