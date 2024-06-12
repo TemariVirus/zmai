@@ -7,7 +7,7 @@ pub fn build(b: *Build) void {
 
     const exe = b.addExecutable(.{
         .name = "zmai",
-        .root_source_file = lazyPath(b, "src/examples/minst.zig"),
+        .root_source_file = lazyPath(b, "src/examples/neat_xor.zig"),
         .target = target,
         .optimize = optimize,
     });
