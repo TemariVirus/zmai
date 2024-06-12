@@ -4,6 +4,8 @@ pub const supervised = @import("supervised.zig");
 const std = @import("std");
 
 var rand = std.rand.DefaultPrng.init(0);
+/// A global random number generator. Uses a fixed seed to provide
+/// deterministic behaviour by default.
 pub const random = rand.random();
 
 /// Sets the seed used for random number generation.

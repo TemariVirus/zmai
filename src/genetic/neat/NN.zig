@@ -1,26 +1,45 @@
-//! A simplified neural network implementation for inference only.
+//! A neural network as expressed by the *enabled* genes in a genome. Meant for
+//! inference only. For a trainable network, use `neat.Genome` instead.
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const expect = std.testing.expect;
+const fs = std.fs;
 const json = std.json;
 
 const neat = @import("../neat.zig");
 const ActivationFn = neat.ActivationFn;
 const ActivationType = neat.ActivationType;
-const ConnectionJson = neat.ConnectionJson;
-const NNJson = neat.NNJson;
+const Gene = Genome.Gene;
+const Genome = neat.Genome;
+const GenomeJson = Genome.GenomeJson;
+
+pub const InitOptions = struct {
+    input_count: u32,
+    output_count: u32,
+    hidden_activation: ActivationType = .relu,
+    output_activation: ActivationType = .tanh,
+};
+
+pub const NNJson = struct {
+    options: InitOptions,
+    genome: GenomeJson,
+};
 
 pub const Node = struct {
     value: f32 = 0,
-    activation: *const ActivationFn,
 
-    pub fn updateValue(self: *Node, nodes: []Node, inputs: []Connection) void {
+    pub fn updateValue(
+        self: *Node,
+        nodes: []Node,
+        inputs: []Connection,
+        activation: *const ActivationFn,
+    ) void {
         self.value = 0;
         for (inputs) |c| {
             self.value += nodes[c.input].value * c.weight;
         }
-        self.value = self.activation(self.value);
+        self.value = activation(self.value);
     }
 };
 
@@ -29,19 +48,22 @@ pub const Connection = struct {
     weight: f32,
 };
 
+/// A jagged array with fixed sizes. Backed by a single contiguous array.
 pub fn JaggedArray(comptime T: type) type {
     return struct {
         items: [*]T,
         splits: []u32,
 
-        pub fn init(allocator: Allocator, items: []std.ArrayList(T)) !JaggedArray(T) {
+        pub fn init(allocator: Allocator, items: []std.ArrayListUnmanaged(T)) !JaggedArray(T) {
             const splits = try allocator.alloc(u32, items.len + 1);
+            errdefer allocator.free(splits);
             splits[0] = 0;
             for (items, 0..) |list, i| {
                 splits[i + 1] = @intCast(splits[i] + list.items.len);
             }
 
             const flat_items = try allocator.alloc(T, splits[splits.len - 1]);
+            errdefer allocator.free(flat_items);
             var i: usize = 0;
             for (items) |list| {
                 @memcpy(flat_items[i..][0..list.items.len], list.items);
@@ -58,69 +80,89 @@ pub fn JaggedArray(comptime T: type) type {
             return self.items[self.splits[index]..self.splits[index + 1]];
         }
 
+        pub fn len(self: JaggedArray(T)) usize {
+            return self.splits.len - 1;
+        }
+
+        pub fn flatLen(self: JaggedArray(T)) usize {
+            return self.splits[self.splits.len - 1];
+        }
+
         pub fn deinit(self: JaggedArray(T), allocator: Allocator) void {
-            allocator.free(self.items[0..self.splits[self.splits.len - 1]]);
+            allocator.free(self.items[0..self.flatLen()]);
             allocator.free(self.splits);
         }
     };
 }
 
-// Layout: [...inputs, bias, ...outputs, ...hiddens]
+/// Layout: [...inputs, bias, ...outputs, ...hiddens]
 nodes: []Node,
 connections: JaggedArray(Connection),
+hidden_activation: *const ActivationFn,
+output_activation: *const ActivationFn,
 
 const Self = @This();
 
-/// Loads a neural network from a json file.
-pub fn load(allocator: Allocator, path: []const u8, inputs_used: []bool) !Self {
-    const file = try std.fs.cwd().openFile(path, .{});
-    var reader = json.Reader(4096, std.fs.File.Reader).init(allocator, file.reader());
-    defer reader.deinit();
-    const saved = try json.parseFromTokenSource(NNJson, allocator, &reader, .{
-        .ignore_unknown_fields = true,
-    });
-    defer saved.deinit();
-
-    return try init(
+pub fn init(allocator: Allocator, genome: Genome, options: InitOptions, inputs_used: []bool) !Self {
+    const obj = GenomeJson.initNoCopy(genome);
+    return try fromJson(
         allocator,
-        saved.value.Inputs,
-        saved.value.Outputs,
-        saved.value.Connections,
-        saved.value.Activations,
+        .{ .options = options, .genome = obj },
         inputs_used,
     );
 }
 
-fn init(
-    allocator: Allocator,
-    input_count: usize,
-    output_count: usize,
-    connections: []ConnectionJson,
-    activations: []ActivationType,
-    inputs_used: []bool,
-) !Self {
+/// Loads a neural network directly from a JSON file.
+/// `inputs_used` is an output parameter that will be set to a mask indicating
+/// which input nodes are used in the network.
+pub fn load(allocator: Allocator, path: []const u8, inputs_used: []bool) !Self {
+    const file = try fs.cwd().openFile(path, .{});
+    defer file.close();
+
+    var reader = json.Reader(4096, fs.File.Reader).init(allocator, file.reader());
+    defer reader.deinit();
+
+    const saved = try json.parseFromTokenSource(
+        NNJson,
+        allocator,
+        &reader,
+        .{ .ignore_unknown_fields = true },
+    );
+    defer saved.deinit();
+
+    return try fromJson(allocator, saved.value, inputs_used);
+}
+
+// TODO: seperate inputs_used from init?
+/// Creates a neural network based from a JSON object. `inputs_used` is an
+/// output parameter that will be set to a mask indicating which input nodes
+/// are used in the network.
+pub fn fromJson(allocator: Allocator, obj: NNJson, inputs_used: []bool) !Self {
+    const genome = obj.genome.genes;
+    const options = obj.options;
+
     const node_count = blk: {
         var max: u32 = 0;
-        for (connections) |c| {
-            max = @max(max, c.Output);
+        for (genome) |gene| {
+            max = @max(max, gene.output);
         }
         break :blk max + 1;
     };
-    const hidden_offset = input_count + output_count + 1;
+    const hidden_offset = options.input_count + options.output_count + 1;
 
     // Only nodes that can be non-zero are useful
     const useful = try scanForwards(
         allocator,
-        input_count,
-        connections,
+        options.input_count,
+        genome,
         node_count,
     );
     defer allocator.free(useful);
     const used = try scanBackwards(
         allocator,
-        input_count,
-        output_count,
-        connections,
+        options.input_count,
+        options.output_count,
+        genome,
         node_count,
     );
     defer allocator.free(used);
@@ -143,45 +185,49 @@ fn init(
         }
         break :blk count;
     };
-    const nodes = try allocator.alloc(Node, useful_count);
     const node_map = try allocator.alloc(u32, node_count);
     defer allocator.free(node_map);
     var index: u32 = 0;
     for (0..node_count) |i| {
         if (useful[i]) {
-            nodes[index] = Node{ .activation = activations[i].func() };
             node_map[i] = index;
             index += 1;
         }
     }
 
-    var connection_lists = try allocator.alloc(std.ArrayList(Connection), nodes.len);
-    for (connection_lists) |*list| {
-        list.* = std.ArrayList(Connection).init(allocator);
-    }
+    var connection_lists = try allocator.alloc(std.ArrayListUnmanaged(Connection), useful_count);
+    @memset(connection_lists, std.ArrayListUnmanaged(Connection){});
     defer {
-        for (connection_lists) |list| {
-            list.deinit();
+        for (connection_lists) |*list| {
+            list.deinit(allocator);
         }
         allocator.free(connection_lists);
     }
 
-    for (connections) |c| {
+    for (genome) |gene| {
         // This implementation is only meant for inference, so we can discard
         // disabled connections
-        if (!c.Enabled or !useful[c.Input] or !useful[c.Output]) {
+        if (!gene.enabled or !useful[gene.input] or !useful[gene.output]) {
             continue;
         }
-        try connection_lists[node_map[c.Output]].append(
-            .{ .input = c.Input, .weight = c.Weight },
+        const in = node_map[gene.input];
+        const out = node_map[gene.output];
+        try connection_lists[out].append(
+            allocator,
+            .{ .input = in, .weight = gene.weight },
         );
     }
     const connections_arrs = try JaggedArray(Connection).init(allocator, connection_lists);
+
+    const nodes = try allocator.alloc(Node, useful_count);
+    @memset(nodes, Node{});
 
     @memcpy(inputs_used, used[0..inputs_used.len]);
     return Self{
         .nodes = nodes,
         .connections = connections_arrs,
+        .hidden_activation = options.hidden_activation.func(),
+        .output_activation = options.output_activation.func(),
     };
 }
 
@@ -192,10 +238,10 @@ pub fn deinit(self: Self, allocator: Allocator) void {
 }
 
 /// Returns a mask indicating which nodes are affected the inputs.
-fn scanForwards(
+pub fn scanForwards(
     allocator: Allocator,
     input_count: usize,
-    connections: []ConnectionJson,
+    connections: []const Gene,
     node_count: u32,
 ) ![]bool {
     const visited = try allocator.alloc(bool, node_count);
@@ -208,24 +254,24 @@ fn scanForwards(
     return visited;
 }
 
-fn scanDownstream(visited: []bool, connections: []ConnectionJson, i: u32) void {
+fn scanDownstream(visited: []bool, connections: []const Gene, i: u32) void {
     visited[i] = true;
     for (connections) |c| {
-        if (c.Input != i) {
+        if (c.input != i) {
             continue;
         }
-        if (!visited[c.Output] and c.Enabled) {
-            scanDownstream(visited, connections, c.Output);
+        if (!visited[c.output] and c.enabled) {
+            scanDownstream(visited, connections, c.output);
         }
     }
 }
 
 /// Returns a mask indicating which nodes affect the outputs.
-fn scanBackwards(
+pub fn scanBackwards(
     allocator: Allocator,
     input_count: usize,
     output_count: usize,
-    connections: []ConnectionJson,
+    connections: []const Gene,
     node_count: u32,
 ) ![]bool {
     const visited = try allocator.alloc(bool, node_count);
@@ -238,18 +284,20 @@ fn scanBackwards(
     return visited;
 }
 
-fn scanUpstream(visited: []bool, connections: []ConnectionJson, i: u32) void {
+fn scanUpstream(visited: []bool, connections: []const Gene, i: u32) void {
     visited[i] = true;
     for (connections) |c| {
-        if (c.Output != i) {
+        if (c.output != i) {
             continue;
         }
-        if (!visited[c.Input] and c.Enabled) {
-            scanUpstream(visited, connections, c.Input);
+        if (!visited[c.input] and c.enabled) {
+            scanUpstream(visited, connections, c.input);
         }
     }
 }
 
+/// Feeds the input values through the network and stores the output in the
+/// provided slice.
 pub fn predict(self: Self, input: []const f32, output: []f32) void {
     const output_offset = input.len + 1;
 
@@ -260,8 +308,12 @@ pub fn predict(self: Self, input: []const f32, output: []f32) void {
     self.nodes[input.len].value = 1.0; // Bias node
 
     // Update hidden all nodes
-    for (input.len + output.len + 1..self.nodes.len) |i| {
-        self.nodes[i].updateValue(self.nodes, self.connections.get(i));
+    for (output_offset + output.len..self.nodes.len) |i| {
+        self.nodes[i].updateValue(
+            self.nodes,
+            self.connections.get(i),
+            self.hidden_activation,
+        );
     }
 
     // Update ouput nodes and get output
@@ -269,6 +321,7 @@ pub fn predict(self: Self, input: []const f32, output: []f32) void {
         self.nodes[output_offset + i].updateValue(
             self.nodes,
             self.connections.get(output_offset + i),
+            self.output_activation,
         );
         output[i] = self.nodes[output_offset + i].value;
     }
@@ -278,26 +331,28 @@ test "predict" {
     const allocator = std.testing.allocator;
 
     // Has used hidden node
-    const nn1 = try load(allocator, "src/genetic/neat/NNs/Qoshae.json");
+    var inputs_used = [_]bool{undefined} ** 8;
+    const nn1 = try load(allocator, "src/genetic/neat/NNs/Qoshae.json", &inputs_used);
     defer nn1.deinit(allocator);
 
-    var out = nn1.predict([_]f32{ 5.2, 1.0, 3.0, 9.0, 11.0, 5.0, 2.0, -0.97 });
+    var out = [_]f32{undefined} ** 2;
+    nn1.predict(&[8]f32{ 5.2, 1.0, 3.0, 9.0, 11.0, 5.0, 2.0, -0.97 }, &out);
     try expect(out[0] == 0.9761649966239929);
     try expect(out[1] == 0.9984789490699768);
 
-    out = nn1.predict([_]f32{ 2.2, 0.0, 3.0, 5.0, 10.0, 8.0, 4.0, -0.97 });
+    nn1.predict(&[8]f32{ 2.2, 0.0, 3.0, 5.0, 10.0, 8.0, 4.0, -0.97 }, &out);
     try expect(out[0] == 0.9988278150558472);
     try expect(out[1] == 0.9965899586677551);
 
     // Has unused hidden node
-    const nn2 = try load(allocator, "src/genetic/neat/NNs/Xesa.json");
+    const nn2 = try load(allocator, "src/genetic/neat/NNs/Xesa.json", &inputs_used);
     defer nn2.deinit(allocator);
 
-    out = nn2.predict([_]f32{ 5.2, 1.0, 3.0, 9.0, 11.0, 5.0, 2.0, -0.97 });
+    nn2.predict(&[8]f32{ 5.2, 1.0, 3.0, 9.0, 11.0, 5.0, 2.0, -0.97 }, &out);
     try expect(out[0] == 0.455297589302063);
     try expect(out[1] == -0.9720132350921631);
 
-    out = nn2.predict([_]f32{ 2.2, 0.0, 3.0, 5.0, 10.0, 8.0, 4.0, -0.97 });
+    nn2.predict(&[8]f32{ 2.2, 0.0, 3.0, 5.0, 10.0, 8.0, 4.0, -0.97 }, &out);
     try expect(out[0] == 1.2168807983398438);
     try expect(out[1] == -0.9620361924171448);
 }

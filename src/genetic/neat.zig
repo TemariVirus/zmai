@@ -1,6 +1,8 @@
 //! NeuralEvolution of Augmenting Topologies.
 
-pub const FastNN = @import("neat/FastNN.zig");
+pub const NN = @import("neat/NN.zig");
+pub const Genome = @import("neat/Genome.zig");
+pub const Trainer = @import("neat/Trainer.zig");
 
 const std = @import("std");
 const math = std.math;
@@ -16,6 +18,7 @@ pub const ActivationType = enum(u8) {
     selu = 6,
     gelu = 7,
     softplus = 8,
+    identity = 9,
 
     pub fn func(self: ActivationType) *const ActivationFn {
         return switch (self) {
@@ -28,6 +31,7 @@ pub const ActivationType = enum(u8) {
             .selu => Activation.selu,
             .gelu => Activation.gelu,
             .softplus => Activation.softplus,
+            .identity => Activation.identity,
         };
     }
 };
@@ -68,23 +72,10 @@ pub const Activation = struct {
     pub fn softplus(x: f32) f32 {
         return @log(1 + @exp(x));
     }
-};
 
-pub const ConnectionJson = struct {
-    Enabled: bool,
-    Input: u32,
-    Output: u32,
-    Weight: f32,
-};
-
-pub const NNJson = struct {
-    Name: []const u8,
-    Played: bool,
-    Inputs: usize,
-    Outputs: usize,
-    Fitness: f64,
-    Connections: []ConnectionJson,
-    Activations: []ActivationType,
+    pub fn identity(x: f32) f32 {
+        return x;
+    }
 };
 
 test {
