@@ -137,25 +137,25 @@ fn loadMinst(allocator: Allocator) !struct {
     const x_train = try readMinstImages(
         allocator,
         &client,
-        "http://yann.lecun.com/exdb/mnist/train-images-idx3-ubyte.gz",
+        "https://storage.googleapis.com/cvdf-datasets/mnist/train-images-idx3-ubyte.gz",
     );
     errdefer allocator.free(x_train);
     const y_train = try readMinstLabels(
         allocator,
         &client,
-        "http://yann.lecun.com/exdb/mnist/train-labels-idx1-ubyte.gz",
+        "https://storage.googleapis.com/cvdf-datasets/mnist/train-labels-idx1-ubyte.gz",
     );
     errdefer allocator.free(y_train);
     const x_test = try readMinstImages(
         allocator,
         &client,
-        "http://yann.lecun.com/exdb/mnist/t10k-images-idx3-ubyte.gz",
+        "https://storage.googleapis.com/cvdf-datasets/mnist/t10k-images-idx3-ubyte.gz",
     );
     errdefer allocator.free(x_test);
     const y_test = try readMinstLabels(
         allocator,
         &client,
-        "http://yann.lecun.com/exdb/mnist/t10k-labels-idx1-ubyte.gz",
+        "https://storage.googleapis.com/cvdf-datasets/mnist/t10k-labels-idx1-ubyte.gz",
     );
 
     return .{ x_train, y_train, x_test, y_test };
