@@ -88,7 +88,8 @@ pub fn main() !void {
     const obj = try Trainer.TrainerJson.init(allocator, trainer);
     defer obj.deinit(allocator);
 
-    const file = try std.fs.cwd().createFile("xor.json", .{});
+    try std.fs.cwd().makePath(".examples-data/");
+    const file = try std.fs.cwd().createFile(".examples-data/xor.json", .{});
     defer file.close();
 
     try std.json.stringify(obj, .{}, file.writer());
