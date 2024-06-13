@@ -196,13 +196,11 @@ pub fn fromJson(allocator: Allocator, obj: NNJson, inputs_used: []bool) !Self {
     }
 
     var connection_lists = try allocator.alloc(std.ArrayListUnmanaged(Connection), useful_count);
+    defer allocator.free(connection_lists);
     @memset(connection_lists, std.ArrayListUnmanaged(Connection){});
-    defer {
-        for (connection_lists) |*list| {
-            list.deinit(allocator);
-        }
-        allocator.free(connection_lists);
-    }
+    defer for (connection_lists) |*list| {
+        list.deinit(allocator);
+    };
 
     for (genome) |gene| {
         // This implementation is only meant for inference, so we can discard
@@ -218,8 +216,10 @@ pub fn fromJson(allocator: Allocator, obj: NNJson, inputs_used: []bool) !Self {
         );
     }
     const connections_arrs = try JaggedArray(Connection).init(allocator, connection_lists);
+    errdefer connections_arrs.deinit(allocator);
 
     const nodes = try allocator.alloc(Node, useful_count);
+    errdefer allocator.free(nodes);
     @memset(nodes, Node{});
 
     @memcpy(inputs_used, used[0..inputs_used.len]);

@@ -118,12 +118,10 @@ pub fn init(allocator: Allocator, population_size: usize, compat_tresh: f32, opt
 
     var population = try std.ArrayListUnmanaged(Genome)
         .initCapacity(allocator, population_size);
-    errdefer {
-        for (0..population.items.len) |i| {
-            population.items[i].deinit(allocator);
-        }
-        population.deinit(allocator);
-    }
+    defer population.deinit(allocator);
+    errdefer for (population.items) |*genome| {
+        genome.deinit(allocator);
+    };
 
     for (0..population_size) |_| {
         population.appendAssumeCapacity(try Genome.init(
@@ -139,7 +137,7 @@ pub fn init(allocator: Allocator, population_size: usize, compat_tresh: f32, opt
         .compat_tresh = compat_tresh,
         .gene_record = gene_record,
         .options = options,
-        .population = population.items,
+        .population = try population.toOwnedSlice(allocator),
     };
 }
 
@@ -150,24 +148,22 @@ pub fn from(allocator: Allocator, obj: TrainerJson) !Self {
 
     var species = try std.ArrayListUnmanaged(Genome)
         .initCapacity(allocator, obj.species.len);
-    errdefer {
-        for (0..species.items.len) |i| {
-            species.items[i].deinit(allocator);
-        }
-        species.deinit(allocator);
-    }
+    defer species.deinit(allocator);
+    errdefer for (species.items) |*genome| {
+        genome.deinit(allocator);
+    };
+
     for (obj.species) |genome| {
         species.appendAssumeCapacity(try Genome.from(allocator, genome, &gene_record));
     }
 
     var population = try std.ArrayListUnmanaged(Genome)
         .initCapacity(allocator, obj.population.len);
-    errdefer {
-        for (0..population.items.len) |i| {
-            population.items[i].deinit(allocator);
-        }
-        population.deinit(allocator);
-    }
+    defer population.deinit(allocator);
+    errdefer for (population.items) |*genome| {
+        genome.deinit(allocator);
+    };
+
     for (obj.population) |genome| {
         population.appendAssumeCapacity(try Genome.from(allocator, genome, &gene_record));
     }
@@ -178,8 +174,8 @@ pub fn from(allocator: Allocator, obj: TrainerJson) !Self {
         .compat_tresh = obj.compat_tresh,
         .gene_record = gene_record,
         .options = obj.options,
-        .species = species.items,
-        .population = population.items,
+        .species = try species.toOwnedSlice(allocator),
+        .population = try population.toOwnedSlice(allocator),
     };
 }
 
@@ -220,73 +216,69 @@ pub fn nextGeneration(self: *Self, fitnesses: []const f64) !void {
             self.compat_tresh,
             self.options.distance_options,
         );
-        if (species.len == self.options.species_target) {
-            break .{ species, speciated };
-        }
+        assert(species.len == speciated.len);
 
         // Adjust compat_tresh
         const compat_power = 1 - @as(f32, @floatFromInt(i)) / @as(f32, @floatFromInt(self.options.species_try_times));
         const compat_mod = math.pow(f32, self.options.compat_mod, compat_power);
         if (species.len > self.options.species_target) {
             self.compat_tresh *= compat_mod;
-        } else {
+        } else if (species.len < self.options.species_target) {
             self.compat_tresh /= compat_mod;
         }
 
-        for (0..species.len) |j| {
-            species[j].deinit(self.allocator);
+        if (i == self.options.species_try_times - 1 or species.len == self.options.species_target) {
+            break .{ species, speciated };
+        }
+
+        // Deallocate and try again
+        for (species) |*genome| {
+            genome.deinit(self.allocator);
         }
         self.allocator.free(species);
-        for (0..speciated.len) |j| {
-            speciated[j].deinit(self.allocator);
+        for (speciated) |*list| {
+            list.deinit(self.allocator);
         }
         self.allocator.free(speciated);
-    } else try speciate(
-        self.allocator,
-        self.species,
-        self.population,
-        self.compat_tresh,
-        self.options.distance_options,
-    );
-    assert(species.len == speciated.len);
-    defer {
-        for (0..speciated.len) |i| {
-            speciated[i].deinit(self.allocator);
-        }
-        self.allocator.free(speciated);
-    }
+    } else unreachable;
+    defer self.allocator.free(speciated);
+    defer for (speciated) |*list| {
+        list.deinit(self.allocator);
+    };
 
     // Mating
     const offspring_counts = try offspringCounts(self.allocator, speciated, fitnesses);
     defer self.allocator.free(offspring_counts);
-    var population = std.ArrayList(Genome).init(self.allocator);
-    try population.ensureTotalCapacityPrecise(self.population.len);
-    errdefer {
-        for (0..population.items.len) |i| {
-            population.items[i].deinit(self.allocator);
-        }
-        population.deinit();
-    }
+
+    var population = try std.ArrayListUnmanaged(Genome)
+        .initCapacity(self.allocator, self.population.len);
+    errdefer population.deinit(self.allocator);
+    errdefer for (population.items) |*genome| {
+        genome.deinit(self.allocator);
+    };
 
     for (speciated, offspring_counts) |s, count| {
+        const current_species = s.items;
+
         const lessThanFn = struct {
             fn lessThanFn(fits: []const f64, lhs: usize, rhs: usize) bool {
                 // Use greater than to sort in descending order
                 return fits[lhs] > fits[rhs];
             }
         }.lessThanFn;
-        std.sort.pdq(usize, s.items, fitnesses, lessThanFn);
+        std.sort.pdq(usize, current_species, fitnesses, lessThanFn);
 
         // Add retain_top without mutating
-        for (0..@min(s.items.len, @min(count, self.options.retain_top))) |i| {
+        for (0..@min(current_species.len, @min(count, self.options.retain_top))) |i| {
+            const index = current_species[i];
             population.appendAssumeCapacity(
-                try self.population[s.items[i]].clone(self.allocator),
+                try self.population[index].clone(self.allocator),
             );
         }
 
         // Only top few can reproduce
-        const elite_count = @as(f32, @floatFromInt(s.items.len)) * self.options.elite_percent;
-        const elites = s.items[0..@intFromFloat(@ceil(elite_count))];
+        const elite_count = @as(f32, @floatFromInt(current_species.len)) * self.options.elite_percent;
+        const elites = current_species[0..@intFromFloat(@ceil(elite_count))];
 
         // Prepare roulette wheel (fitter parents have higher chance of mating)
         const wheel = try self.allocator.alloc(f64, elites.len);
@@ -296,7 +288,7 @@ pub fn nextGeneration(self: *Self, fitnesses: []const f64) !void {
         }
 
         // Make children
-        for (0..count -| @min(s.items.len, self.options.retain_top)) |_| {
+        for (0..count -| @min(current_species.len, self.options.retain_top)) |_| {
             const index1 = elites[random.weightedIndex(f64, wheel)];
             const parent1 = self.population[index1];
 
@@ -310,17 +302,20 @@ pub fn nextGeneration(self: *Self, fitnesses: []const f64) !void {
         }
     }
 
+    // Update state
+    errdefer comptime unreachable; // There must be no errors after this point
     self.generation += 1;
-    for (0..self.species.len) |i| {
-        self.species[i].deinit(self.allocator);
+    for (self.species) |*genome| {
+        genome.deinit(self.allocator);
     }
     self.allocator.free(self.species);
     self.species = species;
 
     const old_population = self.population;
-    self.population = try population.toOwnedSlice();
-    for (0..old_population.len) |i| {
-        old_population[i].deinit(self.allocator);
+    assert(population.capacity == population.items.len);
+    self.population = population.items;
+    for (old_population) |*genome| {
+        genome.deinit(self.allocator);
     }
     self.allocator.free(old_population);
 }
@@ -333,31 +328,29 @@ pub fn speciate(
     compat_tresh: f32,
     options: Genome.DistanceOptions,
 ) !struct { []Genome, []SpeciesList } {
-    var species = std.ArrayListUnmanaged(Genome){};
-    try species.ensureTotalCapacity(allocator, old_species.len);
-    errdefer {
-        for (0..species.items.len) |i| {
-            species.items[i].deinit(allocator);
-        }
-        species.deinit(allocator);
-    }
+    var species = try std.ArrayListUnmanaged(Genome)
+        .initCapacity(allocator, old_species.len);
+    defer species.deinit(allocator);
+    errdefer for (species.items) |*genome| {
+        genome.deinit(allocator);
+    };
+
     for (old_species) |genome| {
         species.appendAssumeCapacity(try genome.clone(allocator));
     }
 
     var speciated = std.ArrayListUnmanaged(SpeciesList){};
     try speciated.appendNTimes(allocator, SpeciesList{}, species.items.len);
-    errdefer {
-        for (0..speciated.items.len) |i| {
-            speciated.items[i].deinit(allocator);
-        }
-        speciated.deinit(allocator);
-    }
+    defer speciated.deinit(allocator);
+    errdefer for (speciated.items) |*genome| {
+        genome.deinit(allocator);
+    };
 
     for (population, 0..) |genome, i| {
         for (species.items, 0..) |repr, species_i| {
             if (repr.distance(genome, options) < compat_tresh) {
-                try speciated.items[species_i].append(allocator, i);
+                const match = &speciated.items[species_i];
+                try match.append(allocator, i);
                 break;
             }
         } else {

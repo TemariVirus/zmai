@@ -22,8 +22,8 @@ const y = [_][]const f32{
 
 // Trains a NEAT population to learn the binary XOR function.
 pub fn main() !void {
-    const POP_SIZE = 100;
-    const GENERATIONS = 40;
+    const POP_SIZE = 50;
+    const GENERATIONS = 50;
 
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
@@ -42,8 +42,11 @@ pub fn main() !void {
         POP_SIZE,
         1.0,
         .{
-            .species_target = 3,
+            .species_target = 4,
             .nn_options = nn_options,
+            .mutate_options = .{
+                .node_add_prob = 0.06,
+            },
         },
     );
     defer trainer.deinit();
@@ -85,14 +88,16 @@ pub fn main() !void {
     }
 
     // Save the trained population
-    const obj = try Trainer.TrainerJson.init(allocator, trainer);
-    defer obj.deinit(allocator);
+    {
+        const obj = try Trainer.TrainerJson.init(allocator, trainer);
+        defer obj.deinit(allocator);
 
-    try std.fs.cwd().makePath(".examples-data/");
-    const file = try std.fs.cwd().createFile(".examples-data/xor.json", .{});
-    defer file.close();
+        try std.fs.cwd().makePath(".examples-data/");
+        const file = try std.fs.cwd().createFile(".examples-data/xor.json", .{});
+        defer file.close();
 
-    try std.json.stringify(obj, .{}, file.writer());
+        try std.json.stringify(obj, .{}, file.writer());
+    }
 
     // Print the fittest NN's predictions
     const index = std.mem.indexOfMax(f64, fitnesses);
