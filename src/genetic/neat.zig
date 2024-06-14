@@ -88,7 +88,7 @@ pub const Activation = struct {
     }
 
     pub fn step(x: f32) f32 {
-        return @intFromBool(x >= 0);
+        return @floatFromInt(@intFromBool(x >= 0));
     }
 
     pub fn gaussian(x: f32) f32 {
