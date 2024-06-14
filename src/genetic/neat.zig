@@ -19,6 +19,9 @@ pub const ActivationType = enum(u8) {
     gelu = 7,
     softplus = 8,
     identity = 9,
+    swish = 10,
+    step = 11,
+    gaussian = 12,
 
     pub fn func(self: ActivationType) *const ActivationFn {
         return switch (self) {
@@ -32,6 +35,9 @@ pub const ActivationType = enum(u8) {
             .gelu => Activation.gelu,
             .softplus => Activation.softplus,
             .identity => Activation.identity,
+            .swish => Activation.swish,
+            .step => Activation.step,
+            .gaussian => Activation.gaussian,
         };
     }
 };
@@ -75,6 +81,18 @@ pub const Activation = struct {
 
     pub fn identity(x: f32) f32 {
         return x;
+    }
+
+    pub fn swish(x: f32) f32 {
+        return x / (1 + @exp(-x));
+    }
+
+    pub fn step(x: f32) f32 {
+        return @intFromBool(x >= 0);
+    }
+
+    pub fn gaussian(x: f32) f32 {
+        return @exp(-x * x);
     }
 };
 
