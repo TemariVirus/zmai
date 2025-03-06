@@ -25,19 +25,19 @@ pub fn main() !void {
     const POP_SIZE = 50;
     const GENERATIONS = 50;
 
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    const allocator = gpa.allocator();
-    defer _ = gpa.deinit();
+    var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
+    const allocator = debug_allocator.allocator();
+    defer _ = debug_allocator.deinit();
 
     // Define the population
     zmai.setRandomSeed(23);
-    const nn_options = NN.InitOptions{
+    const nn_options: NN.InitOptions = .{
         .input_count = 2,
         .output_count = 1,
         .hidden_activation = .relu,
         .output_activation = .tanh,
     };
-    var trainer = try Trainer.init(
+    var trainer: Trainer = try .init(
         allocator,
         POP_SIZE,
         1.0,
@@ -60,7 +60,7 @@ pub fn main() !void {
         var total_fitness: f64 = 0;
         var max_fitness: f64 = 0;
         for (trainer.population, 0..) |genome, j| {
-            const nn = try NN.init(
+            const nn: NN = try .init(
                 allocator,
                 genome,
                 nn_options,
@@ -89,7 +89,7 @@ pub fn main() !void {
 
     // Save the trained population
     {
-        const obj = try Trainer.TrainerJson.init(allocator, trainer);
+        const obj: Trainer.TrainerJson = try .init(allocator, trainer);
         defer obj.deinit(allocator);
 
         try std.fs.cwd().makePath(".examples-data/");
@@ -101,7 +101,7 @@ pub fn main() !void {
 
     // Print the fittest NN's predictions
     const index = std.mem.indexOfMax(f64, fitnesses);
-    const nn = try NN.init(
+    const nn: NN = try .init(
         allocator,
         trainer.population[index],
         nn_options,

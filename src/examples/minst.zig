@@ -15,6 +15,12 @@ const MaxPool2D = supervised.layers.MaxPool2D;
 const AvgPool2D = supervised.layers.AvgPool2D;
 const Dense = supervised.layers.Dense;
 
+const runtime_safety = switch (@import("builtin").mode) {
+    .Debug, .ReleaseSafe => false,
+    .ReleaseFast, .ReleaseSmall => true,
+};
+var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
+
 // Crop edges of images as they are mostly 0s
 const EDGE_CROP = 2;
 const IMAGE_WIDTH = 28 - (2 * EDGE_CROP);
@@ -23,13 +29,17 @@ const NUM_CLASSES = 10;
 
 // Train a model to recognize handwritten digits from the MNIST dataset.
 pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    const allocator = gpa.allocator();
-    defer _ = gpa.deinit();
+    const allocator = if (runtime_safety)
+        debug_allocator.allocator()
+    else
+        std.heap.smp_allocator;
+    defer if (runtime_safety) {
+        _ = debug_allocator.deinit();
+    };
 
     // Define the model
     zmai.setRandomSeed(23);
-    const conv1 = try Conv2D.init(
+    const conv1: Conv2D = try .init(
         allocator,
         .{ .x = IMAGE_WIDTH, .y = IMAGE_HEIGHT, .z = 1 },
         3,
@@ -38,12 +48,12 @@ pub fn main() !void {
         .elu,
         zmai.uniformRandom,
     );
-    const pool1 = MaxPool2D.init(
+    const pool1: MaxPool2D = .init(
         conv1.outputShape(),
         .{ .x = 2, .y = 2 },
         .{ .x = 2, .y = 2 },
     );
-    const conv2 = try Conv2D.init(
+    const conv2: Conv2D = try .init(
         allocator,
         pool1.outputShape(),
         6,
@@ -52,19 +62,19 @@ pub fn main() !void {
         .elu,
         zmai.uniformRandom,
     );
-    const pool2 = AvgPool2D.init(
+    const pool2: AvgPool2D = .init(
         conv2.outputShape(),
         .{ .x = 2, .y = 2 },
         .{ .x = 2, .y = 2 },
     );
-    const dense1 = try Dense.init(
+    const dense1: Dense = try .init(
         allocator,
         pool2.outputSize(),
         24,
         .elu,
         zmai.uniformRandom,
     );
-    const dense2 = try Dense.init(
+    const dense2: Dense = try .init(
         allocator,
         dense1.outputSize(),
         NUM_CLASSES,
@@ -106,7 +116,7 @@ pub fn main() !void {
     }
 
     std.debug.print("Training model...\n", .{});
-    const sgd = try Sgd.init(allocator, model);
+    const sgd: Sgd = try .init(allocator, model);
     defer sgd.deinit();
     try sgd.fit(
         x_train,
@@ -131,7 +141,7 @@ fn loadMinst(allocator: Allocator) !struct {
     [][]f32,
     [][]f32,
 } {
-    var client = Client{ .allocator = allocator };
+    var client: Client = .{ .allocator = allocator };
     defer client.deinit();
 
     const x_train = try readMinstImages(
@@ -166,7 +176,7 @@ fn readMinstLabels(
     client: *Client,
     url: []const u8,
 ) ![][]f32 {
-    var res_body = std.ArrayList(u8).init(allocator);
+    var res_body: std.ArrayList(u8) = .init(allocator);
     defer res_body.deinit();
 
     const result = try client.fetch(.{
@@ -177,7 +187,7 @@ fn readMinstLabels(
         return error.NetworkError;
     }
 
-    var result_stream = std.io.FixedBufferStream([]u8){
+    var result_stream: std.io.FixedBufferStream([]u8) = .{
         .buffer = res_body.items,
         .pos = 0,
     };
@@ -206,7 +216,7 @@ fn readMinstImages(
     client: *Client,
     url: []const u8,
 ) ![][]f32 {
-    var res_body = std.ArrayList(u8).init(allocator);
+    var res_body: std.ArrayList(u8) = .init(allocator);
     defer res_body.deinit();
 
     const result = try client.fetch(.{
@@ -218,7 +228,7 @@ fn readMinstImages(
         return error.NetworkError;
     }
 
-    var result_stream = std.io.FixedBufferStream([]const u8){
+    var result_stream: std.io.FixedBufferStream([]const u8) = .{
         .buffer = res_body.items,
         .pos = 0,
     };

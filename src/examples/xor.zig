@@ -23,9 +23,9 @@ const y = [_][]const f32{
 
 // Trains a simple model to learn the binary XOR function.
 pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    const allocator = gpa.allocator();
-    defer _ = gpa.deinit();
+    var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
+    const allocator = debug_allocator.allocator();
+    defer _ = debug_allocator.deinit();
 
     // Define the model
     zmai.setRandomSeed(23);

@@ -1,6 +1,8 @@
 .{
-    .name = "zmai",
+    .name = .zmai,
     .version = "0.0.0",
+    .fingerprint = 0x2d41448da48d5802,
+    .minimum_zig_version = "0.14.0",
     .dependencies = .{},
     .paths = .{
         "build.zig",

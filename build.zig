@@ -6,8 +6,7 @@ pub fn build(b: *Build) !void {
     const optimize = b.standardOptimizeOption(.{});
 
     const zmai_module = b.addModule("zmai", .{
-        .root_source_file = lazyPath(b, "src/root.zig"),
-        .imports = &.{},
+        .root_source_file = b.path("src/root.zig"),
     });
 
     if (b.option([]const u8, "example", "The example to build")) |name| {
@@ -39,7 +38,7 @@ fn buildExample(
 
     const exe = b.addExecutable(.{
         .name = "zmai",
-        .root_source_file = lazyPath(b, path),
+        .root_source_file = b.path(path),
         .target = target,
         .optimize = optimize,
     });
@@ -50,19 +49,10 @@ fn buildExample(
 
 fn buildTests(b: *Build) void {
     const lib_tests = b.addTest(.{
-        .root_source_file = lazyPath(b, "src/root.zig"),
+        .root_source_file = b.path("src/root.zig"),
     });
 
     const run_lib_tests = b.addRunArtifact(lib_tests);
     const test_step = b.step("test", "Run library tests");
     test_step.dependOn(&run_lib_tests.step);
-}
-
-fn lazyPath(b: *Build, path: []const u8) Build.LazyPath {
-    return .{
-        .src_path = .{
-            .owner = b,
-            .sub_path = path,
-        },
-    };
 }
