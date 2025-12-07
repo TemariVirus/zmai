@@ -4,13 +4,12 @@ const assert = std.debug.assert;
 const math = std.math;
 
 const random = @import("../../root.zig").random;
-
 const neat = @import("../neat.zig");
 const ActivationType = neat.ActivationType;
-const Gene = Genome.Gene;
 const Genome = neat.Genome;
 const GenomeJson = Genome.GenomeJson;
 const NN = neat.NN;
+const Gene = Genome.Gene;
 
 const Self = @This();
 
@@ -64,13 +63,13 @@ pub const TrainerJson = struct {
         const species = try allocator.alloc(GenomeJson, trainer.species.len);
         errdefer allocator.free(species);
         for (0..trainer.species.len) |i| {
-            species[i] = GenomeJson.initNoCopy(trainer.species[i]);
+            species[i] = .initNoCopy(trainer.species[i]);
         }
 
         const population = try allocator.alloc(GenomeJson, trainer.population.len);
         errdefer allocator.free(population);
         for (0..trainer.population.len) |i| {
-            population[i] = GenomeJson.initNoCopy(trainer.population[i]);
+            population[i] = .initNoCopy(trainer.population[i]);
         }
 
         return .{
@@ -112,19 +111,24 @@ options: Options,
 species: []Genome = &.{},
 population: []Genome,
 
-pub fn init(allocator: Allocator, population_size: usize, compat_tresh: f32, options: Options) !Self {
-    var gene_record = GeneRecord.init(allocator);
+pub fn init(
+    allocator: Allocator,
+    population_size: usize,
+    compat_tresh: f32,
+    options: Options,
+) !Self {
+    var gene_record: GeneRecord = .init(allocator);
     errdefer gene_record.deinit();
 
-    var population = try std.ArrayListUnmanaged(Genome)
-        .initCapacity(allocator, population_size);
+    var population: std.ArrayList(Genome) =
+        try .initCapacity(allocator, population_size);
     defer population.deinit(allocator);
     errdefer for (population.items) |*genome| {
         genome.deinit(allocator);
     };
 
     for (0..population_size) |_| {
-        population.appendAssumeCapacity(try Genome.init(
+        population.appendAssumeCapacity(try .init(
             allocator,
             options.nn_options.input_count,
             options.nn_options.output_count,
@@ -143,29 +147,29 @@ pub fn init(allocator: Allocator, population_size: usize, compat_tresh: f32, opt
 
 /// Deserializes a trainer from a JSON object.
 pub fn from(allocator: Allocator, obj: TrainerJson) !Self {
-    var gene_record = GeneRecord.init(allocator);
+    var gene_record: GeneRecord = .init(allocator);
     errdefer gene_record.deinit();
 
-    var species = try std.ArrayListUnmanaged(Genome)
-        .initCapacity(allocator, obj.species.len);
+    var species: std.ArrayList(Genome) =
+        try .initCapacity(allocator, obj.species.len);
     defer species.deinit(allocator);
     errdefer for (species.items) |*genome| {
         genome.deinit(allocator);
     };
 
     for (obj.species) |genome| {
-        species.appendAssumeCapacity(try Genome.from(allocator, genome, &gene_record));
+        species.appendAssumeCapacity(try .from(allocator, genome, &gene_record));
     }
 
-    var population = try std.ArrayListUnmanaged(Genome)
-        .initCapacity(allocator, obj.population.len);
+    var population: std.ArrayList(Genome) =
+        try .initCapacity(allocator, obj.population.len);
     defer population.deinit(allocator);
     errdefer for (population.items) |*genome| {
         genome.deinit(allocator);
     };
 
     for (obj.population) |genome| {
-        population.appendAssumeCapacity(try Genome.from(allocator, genome, &gene_record));
+        population.appendAssumeCapacity(try .from(allocator, genome, &gene_record));
     }
 
     return .{
@@ -227,7 +231,9 @@ pub fn nextGeneration(self: *Self, fitnesses: []const f64) !void {
             self.compat_tresh /= compat_mod;
         }
 
-        if (i == self.options.species_try_times - 1 or species.len == self.options.species_target) {
+        if (i == self.options.species_try_times - 1 or
+            species.len == self.options.species_target)
+        {
             break .{ species, speciated };
         }
 
@@ -250,8 +256,8 @@ pub fn nextGeneration(self: *Self, fitnesses: []const f64) !void {
     const offspring_counts = try offspringCounts(self.allocator, speciated, fitnesses);
     defer self.allocator.free(offspring_counts);
 
-    var population = try std.ArrayListUnmanaged(Genome)
-        .initCapacity(self.allocator, self.population.len);
+    var population: std.ArrayList(Genome) =
+        try .initCapacity(self.allocator, self.population.len);
     errdefer population.deinit(self.allocator);
     errdefer for (population.items) |*genome| {
         genome.deinit(self.allocator);
@@ -320,7 +326,7 @@ pub fn nextGeneration(self: *Self, fitnesses: []const f64) !void {
     self.allocator.free(old_population);
 }
 
-pub const SpeciesList = std.ArrayListUnmanaged(usize);
+pub const SpeciesList = std.ArrayList(usize);
 pub fn speciate(
     allocator: Allocator,
     old_species: []const Genome,
@@ -328,8 +334,8 @@ pub fn speciate(
     compat_tresh: f32,
     options: Genome.DistanceOptions,
 ) !struct { []Genome, []SpeciesList } {
-    var species = try std.ArrayListUnmanaged(Genome)
-        .initCapacity(allocator, old_species.len);
+    var species: std.ArrayList(Genome) =
+        try .initCapacity(allocator, old_species.len);
     defer species.deinit(allocator);
     errdefer for (species.items) |*genome| {
         genome.deinit(allocator);
@@ -339,8 +345,8 @@ pub fn speciate(
         species.appendAssumeCapacity(try genome.clone(allocator));
     }
 
-    var speciated = std.ArrayListUnmanaged(SpeciesList){};
-    try speciated.appendNTimes(allocator, SpeciesList{}, species.items.len);
+    var speciated: std.ArrayList(SpeciesList) = .empty;
+    try speciated.appendNTimes(allocator, .empty, species.items.len);
     defer speciated.deinit(allocator);
     errdefer for (speciated.items) |*genome| {
         genome.deinit(allocator);
@@ -356,7 +362,7 @@ pub fn speciate(
         } else {
             // Make new species if no match
             try species.append(allocator, try genome.clone(allocator));
-            try speciated.append(allocator, SpeciesList{});
+            try speciated.append(allocator, .empty);
             try speciated.items[speciated.items.len - 1].append(allocator, i);
         }
     }

@@ -48,9 +48,7 @@ pub fn identity(arr: []f32) void {
 }
 
 pub fn identityBackward(arr: []f32) void {
-    for (arr) |*x| {
-        x.* = 1;
-    }
+    @memset(arr, 1);
 }
 
 pub const SIGMOID_A = 4.0;
@@ -102,10 +100,11 @@ pub fn softmax(arr: []f32) void {
 /// ones as the combined derivative of softmax and cross-entropy is calculated
 /// in `losses.crossEntropyBackward`.
 pub fn softmaxBackward(arr: []f32) void {
-    for (0..arr.len) |i| {
-        // arr[i] *= 1 - arr[i]; // Actual
-        arr[i] = 1.0;
-    }
+    // Actual
+    // for (arr) |*x| {
+    //     x.* *= 1 - x.*;
+    // }
+    @memset(arr, 1);
 }
 
 pub fn relu(arr: []f32) void {

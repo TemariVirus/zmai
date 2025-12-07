@@ -128,7 +128,14 @@ pub fn backward(
     }
 }
 
-inline fn backwardKernelInput(self: Self, x: usize, y: usize, z: usize, input: []f32, gradient: f32) void {
+inline fn backwardKernelInput(
+    self: Self,
+    x: usize,
+    y: usize,
+    z: usize,
+    input: []f32,
+    gradient: f32,
+) void {
     var in_i = z * self.input_shape.x * self.input_shape.y + y * self.input_shape.x + x;
     for (0..self.pool_size.y) |_| {
         for (0..self.pool_size.x) |_| {

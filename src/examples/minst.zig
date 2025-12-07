@@ -1,7 +1,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Client = std.http.Client;
-const gzip = std.compress.gzip;
+const flate = std.compress.flate;
 const assert = std.debug.assert;
 
 const zmai = @import("zmai");
@@ -94,7 +94,7 @@ pub fn main() !void {
         .{ .dense = dense1 },
         .{ .dense = dense2 },
     };
-    const model = Model{
+    const model: Model = .{
         .layers = &layers,
     };
 
@@ -176,32 +176,28 @@ fn readMinstLabels(
     client: *Client,
     url: []const u8,
 ) ![][]f32 {
-    var res_body: std.ArrayList(u8) = .init(allocator);
+    var res_body: std.Io.Writer.Allocating = .init(allocator);
     defer res_body.deinit();
 
     const result = try client.fetch(.{
-        .response_storage = .{ .dynamic = &res_body },
+        .response_writer = &res_body.writer,
         .location = .{ .url = url },
     });
     if (result.status != .ok) {
         return error.NetworkError;
     }
 
-    var result_stream: std.io.FixedBufferStream([]u8) = .{
-        .buffer = res_body.items,
-        .pos = 0,
-    };
-
-    var decompresser = gzip.decompressor(result_stream.reader());
-    const decompressed_reader = decompresser.reader();
+    var body_reader: std.Io.Reader = .fixed(res_body.writer.buffer);
+    var output_buf: [flate.max_window_len]u8 = undefined;
+    var decompresser: flate.Decompress = .init(&body_reader, .gzip, &output_buf);
 
     // Check magic number
-    assert(try decompressed_reader.readInt(i32, .big) == 2049);
+    assert(try decompresser.reader.takeInt(i32, .big) == 2049);
 
-    const len = try decompressed_reader.readInt(u32, .big);
+    const len = try decompresser.reader.takeInt(u32, .big);
     const one_hot = try allocator.alloc([]f32, len);
     for (one_hot) |*row| {
-        const index = try decompressed_reader.readByte();
+        const index = try decompresser.reader.takeByte();
         row.* = try allocator.alloc(f32, 10);
         for (0..row.len) |i| {
             row.*[i] = if (i == index) 1.0 else 0.0;
@@ -216,39 +212,32 @@ fn readMinstImages(
     client: *Client,
     url: []const u8,
 ) ![][]f32 {
-    var res_body: std.ArrayList(u8) = .init(allocator);
+    var res_body: std.Io.Writer.Allocating = .init(allocator);
     defer res_body.deinit();
 
     const result = try client.fetch(.{
-        .response_storage = .{ .dynamic = &res_body },
-        .max_append_size = 10 * 1024 * 1024, // Largest file is around 9.5MB, 10MiB should be enough
+        .response_writer = &res_body.writer,
         .location = .{ .url = url },
     });
     if (result.status != .ok) {
         return error.NetworkError;
     }
 
-    var result_stream: std.io.FixedBufferStream([]const u8) = .{
-        .buffer = res_body.items,
-        .pos = 0,
-    };
-
-    var decompresser = gzip.decompressor(result_stream.reader());
-    const decompressed_reader = decompresser.reader();
+    var body_reader: std.Io.Reader = .fixed(res_body.writer.buffer);
+    var output_buf: [flate.max_window_len]u8 = undefined;
+    var decompresser: flate.Decompress = .init(&body_reader, .gzip, &output_buf);
 
     // Check magic number
-    assert(try decompressed_reader.readInt(i32, .big) == 2051);
+    assert(try decompresser.reader.takeInt(i32, .big) == 2051);
 
-    const len = try decompressed_reader.readInt(u32, .big);
-    _ = try decompressed_reader.readInt(u32, .big); // rows = 28
-    _ = try decompressed_reader.readInt(u32, .big); // cols = 28
+    const len = try decompresser.reader.takeInt(u32, .big);
+    _ = try decompresser.reader.takeInt(u32, .big); // rows = 28
+    _ = try decompresser.reader.takeInt(u32, .big); // cols = 28
 
     const images = try allocator.alloc([]f32, len);
     for (images) |*row| {
-        var buffer = [_]u8{undefined} ** (28 * 28);
-        if (try decompressed_reader.readAll(&buffer) != buffer.len) {
-            return error.RanOutOfData;
-        }
+        var buffer: [28 * 28]u8 = undefined;
+        try decompresser.reader.readSliceAll(&buffer);
 
         row.* = try allocator.alloc(f32, IMAGE_WIDTH * IMAGE_HEIGHT);
         for (0..IMAGE_HEIGHT) |i| {

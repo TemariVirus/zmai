@@ -4,9 +4,9 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const assert = std.debug.assert;
 
-const Batcher = @import("../optimizers.zig").Batcher;
 const Loss = @import("../losses.zig").Loss;
 const Model = @import("../Model.zig");
+const Batcher = @import("../optimizers.zig").Batcher;
 
 const Self = @This();
 
@@ -71,7 +71,7 @@ pub fn fit(
 ) !void {
     assert(x_data.len == y_data.len);
 
-    var batcher = try Batcher.init(self.allocator, batch_size, x_data, y_data);
+    var batcher: Batcher = try .init(self.allocator, batch_size, x_data, y_data);
     defer batcher.deinit(self.allocator);
 
     for (0..epochs) |epoch| {
@@ -90,7 +90,11 @@ pub fn fit(
 
         loss /= @floatFromInt(x_data.len);
         const time_taken: u64 = @intCast(std.time.nanoTimestamp() - start);
-        std.debug.print("Epoch {d}, loss: {d:.3}, time: {}\n", .{ epoch + 1, loss, std.fmt.fmtDuration(time_taken) });
+        std.debug.print("Epoch {d}, loss: {d:.3}, time: {D}\n", .{
+            epoch + 1,
+            loss,
+            time_taken,
+        });
     }
 }
 

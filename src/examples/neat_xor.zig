@@ -1,10 +1,10 @@
 const std = @import("std");
 
 const zmai = @import("zmai");
-const Genome = neat.Genome;
 const neat = zmai.genetic.neat;
 const NN = neat.NN;
 const Trainer = neat.Trainer;
+const Genome = neat.Genome;
 
 // XOR truth table
 const x = [_][]const f32{
@@ -78,12 +78,12 @@ pub fn main() !void {
         }
 
         const time_taken: u64 = @intCast(std.time.nanoTimestamp() - start);
-        std.debug.print("Epoch: {d:>2}, Species: {}, Avg fit: {d:.3}, Max fit: {d:.3}, Time: {}\n", .{
+        std.debug.print("Epoch: {d:>2}, Species: {}, Avg fit: {d:.3}, Max fit: {d:.3}, Time: {D}\n", .{
             i,
             trainer.species.len,
             total_fitness / POP_SIZE,
             max_fitness,
-            std.fmt.fmtDuration(time_taken),
+            time_taken,
         });
     }
 
@@ -96,7 +96,10 @@ pub fn main() !void {
         const file = try std.fs.cwd().createFile(".examples-data/xor.json", .{});
         defer file.close();
 
-        try std.json.stringify(obj, .{}, file.writer());
+        var file_buf: [4096]u8 = undefined;
+        var file_writer = file.writer(&file_buf);
+        try file_writer.interface.print("{f}", .{std.json.fmt(obj, .{})});
+        try file_writer.interface.flush();
     }
 
     // Print the fittest NN's predictions

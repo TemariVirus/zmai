@@ -23,7 +23,7 @@ pub fn build(b: *Build) !void {
         run_step.dependOn(&run_cmd.step);
     }
 
-    buildTests(b);
+    buildTests(b, target, optimize);
 }
 
 fn buildExample(
@@ -38,18 +38,28 @@ fn buildExample(
 
     const exe = b.addExecutable(.{
         .name = "zmai",
-        .root_source_file = b.path(path),
-        .target = target,
-        .optimize = optimize,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path(path),
+            .target = target,
+            .optimize = optimize,
+        }),
     });
     exe.root_module.addImport("zmai", zmai_module);
 
     return exe;
 }
 
-fn buildTests(b: *Build) void {
+fn buildTests(
+    b: *Build,
+    target: Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+) void {
     const lib_tests = b.addTest(.{
-        .root_source_file = b.path("src/root.zig"),
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/root.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
     });
 
     const run_lib_tests = b.addRunArtifact(lib_tests);

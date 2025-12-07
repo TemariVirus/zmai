@@ -242,13 +242,13 @@ pub fn mutate(
         // Make new connections
         if (split_gene) |split_con| {
             const new_node = self.nodeCount();
-            const in = Gene{
+            const in: Gene = .{
                 .input = split_con.input,
                 .output = new_node,
                 .weight = split_con.weight,
                 .enabled = true,
             };
-            const out = Gene{
+            const out: Gene = .{
                 .input = new_node,
                 .output = split_con.output,
                 .weight = 1.0,
@@ -289,8 +289,8 @@ pub fn distance(self: Self, other: Self, options: DistanceOptions) f32 {
 pub fn nodeCount(self: Self) u32 {
     var node_count: u32 = 0;
     // By not checking the connection input nodes, the only nodes that never be
-    // counted are the input nodes, but their ids are always smaller  than the
-    // output or hidden nodes'. Node ids are enough to get the node count as
+    // counted are the input nodes, but their ids are always smaller than the
+    // outputs' or hidden nodes'. Node ids are enough to get the node count as
     // nodes are never removed.
     for (self.genes.values()) |gene| {
         node_count = @max(node_count, gene.output);

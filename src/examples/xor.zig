@@ -29,8 +29,8 @@ pub fn main() !void {
 
     // Define the model
     zmai.setRandomSeed(23);
-    var dense1 = try Dense.init(allocator, 2, 2, .relu, zmai.gaussianRandom);
-    var dense2 = try Dense.init(allocator, 2, 1, .sigmoid, zmai.gaussianRandom);
+    var dense1: Dense = try .init(allocator, 2, 2, .relu, zmai.gaussianRandom);
+    var dense2: Dense = try .init(allocator, 2, 1, .sigmoid, zmai.gaussianRandom);
     defer dense1.deinit(allocator);
     defer dense2.deinit(allocator);
 
@@ -38,12 +38,12 @@ pub fn main() !void {
         .{ .dense = dense1 },
         .{ .dense = dense2 },
     };
-    const model = Model{
+    const model: Model = .{
         .layers = &layers,
     };
 
     // Create stochastic gradient descent optimiser and train the model
-    const sgd = try Sgd.init(allocator, model);
+    const sgd: Sgd = try .init(allocator, model);
     try sgd.fit(
         &x,
         &y,

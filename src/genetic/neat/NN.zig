@@ -10,9 +10,9 @@ const json = std.json;
 const neat = @import("../neat.zig");
 const ActivationFn = neat.ActivationFn;
 const ActivationType = neat.ActivationType;
-const Gene = Genome.Gene;
 const Genome = neat.Genome;
 const GenomeJson = Genome.GenomeJson;
+const Gene = Genome.Gene;
 
 pub const InitOptions = struct {
     input_count: u32,
@@ -54,7 +54,7 @@ pub fn JaggedArray(comptime T: type) type {
         items: [*]T,
         splits: []u32,
 
-        pub fn init(allocator: Allocator, items: []std.ArrayListUnmanaged(T)) !JaggedArray(T) {
+        pub fn init(allocator: Allocator, items: []std.ArrayList(T)) !JaggedArray(T) {
             const splits = try allocator.alloc(u32, items.len + 1);
             errdefer allocator.free(splits);
             splits[0] = 0;
@@ -103,8 +103,13 @@ output_activation: *const ActivationFn,
 
 const Self = @This();
 
-pub fn init(allocator: Allocator, genome: Genome, options: InitOptions, inputs_used: []bool) !Self {
-    const obj = GenomeJson.initNoCopy(genome);
+pub fn init(
+    allocator: Allocator,
+    genome: Genome,
+    options: InitOptions,
+    inputs_used: []bool,
+) !Self {
+    const obj: GenomeJson = .initNoCopy(genome);
     return try fromJson(
         allocator,
         .{ .options = options, .genome = obj },
@@ -119,7 +124,10 @@ pub fn load(allocator: Allocator, path: []const u8, inputs_used: []bool) !Self {
     const file = try fs.cwd().openFile(path, .{});
     defer file.close();
 
-    var reader = json.Reader(4096, fs.File.Reader).init(allocator, file.reader());
+    var file_buf: [4096]u8 = undefined;
+    var file_reader = file.reader(&file_buf);
+
+    var reader: json.Reader = .init(allocator, &file_reader.interface);
     defer reader.deinit();
 
     const saved = try json.parseFromTokenSource(
@@ -195,9 +203,9 @@ pub fn fromJson(allocator: Allocator, obj: NNJson, inputs_used: []bool) !Self {
         }
     }
 
-    var connection_lists = try allocator.alloc(std.ArrayListUnmanaged(Connection), useful_count);
+    var connection_lists = try allocator.alloc(std.ArrayList(Connection), useful_count);
     defer allocator.free(connection_lists);
-    @memset(connection_lists, std.ArrayListUnmanaged(Connection){});
+    @memset(connection_lists, std.ArrayList(Connection){});
     defer for (connection_lists) |*list| {
         list.deinit(allocator);
     };
@@ -215,7 +223,7 @@ pub fn fromJson(allocator: Allocator, obj: NNJson, inputs_used: []bool) !Self {
             .{ .input = in, .weight = gene.weight },
         );
     }
-    const connections_arrs = try JaggedArray(Connection).init(allocator, connection_lists);
+    const connections_arrs: JaggedArray(Connection) = try .init(allocator, connection_lists);
     errdefer connections_arrs.deinit(allocator);
 
     const nodes = try allocator.alloc(Node, useful_count);
@@ -331,11 +339,11 @@ test "predict" {
     const allocator = std.testing.allocator;
 
     // Has used hidden node
-    var inputs_used = [_]bool{undefined} ** 8;
+    var inputs_used: [8]bool = undefined;
     const nn1 = try load(allocator, "src/genetic/neat/NNs/Qoshae.json", &inputs_used);
     defer nn1.deinit(allocator);
 
-    var out = [_]f32{undefined} ** 2;
+    var out: [2]f32 = undefined;
     nn1.predict(&[8]f32{ 5.2, 1.0, 3.0, 9.0, 11.0, 5.0, 2.0, -0.97 }, &out);
     try expect(out[0] == 0.9761649966239929);
     try expect(out[1] == 0.9984789490699768);

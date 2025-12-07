@@ -132,7 +132,13 @@ pub fn forward(self: Self, input: []const f32, output: []f32) void {
     self.activation.forward(output);
 }
 
-inline fn forwardKernel(self: Self, kernel_i: usize, x: usize, y: usize, input: []const f32) f32 {
+inline fn forwardKernel(
+    self: Self,
+    kernel_i: usize,
+    x: usize,
+    y: usize,
+    input: []const f32,
+) f32 {
     var sum: f32 = self.biases[kernel_i];
 
     var weight_i = kernel_i * self.kernel_size.x * self.kernel_size.y * self.inputChannels();
@@ -212,7 +218,15 @@ pub fn backward(
     }
 }
 
-inline fn backwardKernelDeltas(self: Self, kernel_i: usize, x: usize, y: usize, input: []const f32, deltas: []f32, gradient: f32) void {
+inline fn backwardKernelDeltas(
+    self: Self,
+    kernel_i: usize,
+    x: usize,
+    y: usize,
+    input: []const f32,
+    deltas: []f32,
+    gradient: f32,
+) void {
     deltas[self.weights.len + kernel_i] -= gradient;
 
     var weight_i = kernel_i * self.kernel_size.x * self.kernel_size.y * self.inputChannels();
@@ -229,7 +243,14 @@ inline fn backwardKernelDeltas(self: Self, kernel_i: usize, x: usize, y: usize, 
     }
 }
 
-inline fn backwardKernelInput(self: Self, kernel_i: usize, x: usize, y: usize, input: []f32, gradient: f32) void {
+inline fn backwardKernelInput(
+    self: Self,
+    kernel_i: usize,
+    x: usize,
+    y: usize,
+    input: []f32,
+    gradient: f32,
+) void {
     var weight_i = kernel_i * self.kernel_size.x * self.kernel_size.y * self.inputChannels();
     for (0..self.inputChannels()) |z| {
         var in_i = z * self.input_size.x * self.input_size.y + y * self.input_size.x + x;
